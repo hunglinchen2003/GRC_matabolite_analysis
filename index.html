@@ -280,6 +280,11 @@ select.group-assign{width:100%}
     <div id="sigTableContent"></div>
   </div>
   <div id="volcanoTab" class="tab-content">
+    <div class="row" style="margin-bottom:10px;align-items:flex-end">
+      <div class="col" style="max-width:200px"><label>Group A (reference)</label><select id="volcGrpA" style="width:100%"></select></div>
+      <div class="col" style="max-width:200px"><label>Group B (vs A)</label><select id="volcGrpB" style="width:100%"></select></div>
+      <div><button class="btn btn-primary btn-sm" onclick="renderVolcano()">Update Volcano</button></div>
+    </div>
     <div id="volcanoPlot" class="plot-container"></div>
   </div>
   <div id="foldChangeTab" class="tab-content">
@@ -306,6 +311,7 @@ select.group-assign{width:100%}
     <div class="tab" onclick="showVizTab('heatmapTab',this)">Heatmap</div>
     <div class="tab" onclick="showVizTab('boxTab',this)">Box / Violin</div>
     <div class="tab" onclick="showVizTab('barTab',this)">Bar Plots</div>
+    <div class="tab" onclick="showVizTab('pathwayTab',this)">Pathway Map</div>
   </div>
   <div id="pcaTab" class="tab-content active">
     <div class="two-col" style="margin-bottom:10px">
@@ -330,15 +336,25 @@ select.group-assign{width:100%}
   </div>
   <div id="heatmapTab" class="tab-content">
     <div class="row" style="margin-bottom:10px">
-      <div class="col"><label>Top N features</label><input type="number" id="heatmapN" value="50" min="5" max="200" style="width:100%"></div>
+      <div class="col"><label>Top N features</label><input type="number" id="heatmapN" value="50" min="5" max="300" style="width:100%"></div>
       <div class="col"><label>Feature ranking</label>
         <select id="heatmapRank" style="width:100%">
           <option value="pvalue">By p-value</option>
           <option value="fc">By fold change</option>
           <option value="vip">By VIP score</option>
+          <option value="all">All features</option>
         </select>
       </div>
-      <div class="col" style="align-self:flex-end"><button class="btn btn-primary btn-sm" onclick="renderHeatmap()">Refresh Heatmap</button></div>
+      <div class="col"><label>Sample scope</label>
+        <select id="heatmapScope" style="width:100%">
+          <option value="grouped">Grouped samples only</option>
+          <option value="all">All samples (incl. unassigned)</option>
+        </select>
+      </div>
+      <div class="col" style="align-self:flex-end">
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;margin-bottom:5px"><input type="checkbox" id="heatmapCluster" checked> Cluster rows &amp; columns</label>
+        <button class="btn btn-primary btn-sm" onclick="renderHeatmap()">Refresh Heatmap</button>
+      </div>
     </div>
     <div id="heatmapPlot" class="plot-container" style="min-height:600px"></div>
   </div>
@@ -366,6 +382,21 @@ select.group-assign{width:100%}
     </div>
     <div id="barPlot" class="plot-container"></div>
     <div id="topBarPlots" style="margin-top:10px"></div>
+  </div>
+  <div id="pathwayTab" class="tab-content">
+    <div class="alert alert-info" style="margin-bottom:10px">Polar metabolite pathway map — compound nodes colored by fold change (Group B vs Group A). Only available after analysis of polar data.</div>
+    <div class="row" style="margin-bottom:10px;align-items:flex-end">
+      <div class="col" style="max-width:180px"><label>Group A (reference)</label><select id="pathGrpA" style="width:100%"></select></div>
+      <div class="col" style="max-width:180px"><label>Group B (vs A)</label><select id="pathGrpB" style="width:100%"></select></div>
+      <div class="col" style="max-width:120px"><label>FDR threshold</label><input type="number" id="pathFdrThresh" value="0.05" min="0" max="1" step="0.01" style="width:100%"></div>
+      <div><button class="btn btn-primary btn-sm" onclick="renderPathwayMap()">Update Map</button></div>
+    </div>
+    <div id="pathwayAlert"></div>
+    <div id="pathwayMapContainer" style="overflow:auto;border:1px solid #e2e8f0;border-radius:8px;background:#f8faff;min-height:520px">
+      <svg id="pathwaySVG" viewBox="0 0 1100 800" style="width:100%;min-height:520px;display:block"></svg>
+    </div>
+    <div id="pathwayLegend" style="margin-top:8px;font-size:12px;color:#64748b;display:flex;gap:16px;align-items:center;flex-wrap:wrap"></div>
+    <div id="pathwayHitList" style="margin-top:10px;font-size:12px"></div>
   </div>
 </div>
 <div id="stepNav" style="display:flex;gap:8px;justify-content:space-between">
@@ -411,6 +442,7 @@ select.group-assign{width:100%}
     <label><input type="checkbox" id="rptHeatmap" checked> Heatmap</label>
     <label><input type="checkbox" id="rptBox" checked> Box/Violin Plots (top 10 sig)</label>
     <label><input type="checkbox" id="rptBar" checked> Bar Plots (top 10 sig)</label>
+    <label><input type="checkbox" id="rptPathway"> Pathway Map (polar data only)</label>
   </div>
   <button class="btn btn-warning" onclick="exportWordReport()">📄 Generate &amp; Download Word Report</button>
   <div id="exportStatus" style="margin-top:10px"></div>
@@ -521,18 +553,28 @@ function parseExcel(file) {
             sampleIds.push(String(row0[j]).trim());
         }
         const nSamples = sampleIds.length;
+        // Auto-detect column layout from Row 2 headers
+        const row1 = data[1] || [];
+        const h1 = String(row1[1]||'').toLowerCase();
+        // Polar: col1=Name, col2=Transition, col3=CAS
+        // Non-polar: col1=Transition, col2=CAS, col3=Name
+        const isPolar = h1 === 'name';
+        const COL = isPolar
+          ? {group:0, name:1, transition:2, cas:3}
+          : {group:0, transition:1, cas:2, name:3};
+        APP.dataType = isPolar ? 'polar' : 'nonpolar';
         const compounds = [];
         const matrix = Array.from({length:nSamples}, () => []);
         let nullCount = 0;
         for (let i = 2; i < data.length; i++) {
           const row = data[i];
-          if (!row || !row[3]) continue;
-          const name = String(row[3]).trim();
+          if (!row || !row[COL.name]) continue;
+          const name = String(row[COL.name]).trim();
           if (!name) continue;
           compounds.push({
-            group: row[0] ? String(row[0]).trim() : '',
-            transition: row[1] ? String(row[1]).trim() : '',
-            cas: row[2] ? String(row[2]).trim() : '',
+            group: row[COL.group] ? String(row[COL.group]).trim() : '',
+            transition: row[COL.transition] ? String(row[COL.transition]).trim() : '',
+            cas: row[COL.cas] ? String(row[COL.cas]).trim() : '',
             name: name
           });
           for (let j = 0; j < nSamples; j++) {
@@ -1060,6 +1102,15 @@ function renderAnalysis() {
       </div>
     </div>`;
 
+  // Populate group selectors for volcano + pathway
+  const allGroups = [...new Set(APP.config.groups.filter(g=>g&&g!==''))];
+  ['volcGrpA','volcGrpB','pathGrpA','pathGrpB'].forEach((selId,idx)=>{
+    const sel=document.getElementById(selId);
+    if (!sel) return;
+    sel.innerHTML=allGroups.map(g=>`<option value="${g}">${g}</option>`).join('');
+    if (idx===1||idx===3) sel.selectedIndex=Math.min(1,allGroups.length-1); // Group B = second group by default
+  });
+
   renderSigTable();
 }
 
@@ -1105,28 +1156,55 @@ function renderSigTable() {
 }
 
 function renderVolcano() {
-  const res = APP.results;
+  if (!APP.results||!APP.processed) return;
   const pThresh = APP.processing.pThresh;
   const fcThresh = APP.processing.fcThresh;
-  const xs = res.map(r=>r.fc);
-  const ys = res.map(r=>-Math.log10(r.pvalue+1e-300));
-  const colors = res.map(r => r.significant ? (r.fc>0?'#dc2626':'#2563a8') : '#94a3b8');
-  const sizes = res.map(r => r.significant ? 7 : 4);
+  const grpA = document.getElementById('volcGrpA')?.value;
+  const grpB = document.getElementById('volcGrpB')?.value;
+  let xs,ys,names,colors,sizes,plotTitle;
 
-  const trace = { x:xs, y:ys, mode:'markers', type:'scattergl',
+  if (grpA && grpB && grpA!==grpB) {
+    // Ad-hoc pairwise comparison
+    const grps=APP.processed.groups, mat=APP.processed.mat;
+    const idxA=grps.map((g,i)=>g===grpA?i:-1).filter(i=>i>=0);
+    const idxB=grps.map((g,i)=>g===grpB?i:-1).filter(i=>i>=0);
+    if (!idxA.length||!idxB.length) return;
+    xs=[]; ys=[]; names=[]; colors=[]; sizes=[];
+    APP.processed.compounds.forEach((cmp,fi)=>{
+      const vA=idxA.map(i=>mat[i][fi]);
+      const vB=idxB.map(i=>mat[i][fi]);
+      const fc=mean(vB)-mean(vA);
+      const pv=Math.max(1e-300,welchTTest(vA,vB));
+      const sig=Math.abs(fc)>=fcThresh&&pv<pThresh;
+      xs.push(fc); ys.push(-Math.log10(pv));
+      names.push(cmp.name);
+      colors.push(sig?(fc>0?'#dc2626':'#2563a8'):'#94a3b8');
+      sizes.push(sig?7:4);
+    });
+    plotTitle=`Volcano Plot: ${grpB} vs ${grpA}`;
+  } else {
+    const res=APP.results;
+    xs=res.map(r=>r.fc); ys=res.map(r=>-Math.log10(r.pvalue+1e-300));
+    names=res.map(r=>r.name);
+    colors=res.map(r=>r.significant?(r.fc>0?'#dc2626':'#2563a8'):'#94a3b8');
+    sizes=res.map(r=>r.significant?7:4);
+    plotTitle='Volcano Plot (primary comparison)';
+  }
+
+  const trace={x:xs,y:ys,mode:'markers',type:'scattergl',
     marker:{color:colors,size:sizes,opacity:0.7},
-    text:res.map(r=>r.name), hovertemplate:'<b>%{text}</b><br>Log2FC: %{x:.3f}<br>-log10p: %{y:.3f}<extra></extra>'
-  };
-  const layout = {
-    xaxis:{title:'Log2 Fold Change',zeroline:true},
+    text:names,hovertemplate:'<b>%{text}</b><br>Log2FC: %{x:.3f}<br>-log10p: %{y:.3f}<extra></extra>'};
+  const maxX=Math.max(Math.abs(Math.min(...xs)),Math.max(...xs),3)+0.5;
+  const layout={
+    xaxis:{title:'Log2 Fold Change',zeroline:true,range:[-maxX,maxX]},
     yaxis:{title:'-Log10(p-value)'},
-    title:'Volcano Plot',
+    title:plotTitle,
     shapes:[
       {type:'line',x0:-fcThresh,x1:-fcThresh,y0:0,y1:1,yref:'paper',line:{dash:'dash',color:'#94a3b8'}},
       {type:'line',x0:fcThresh,x1:fcThresh,y0:0,y1:1,yref:'paper',line:{dash:'dash',color:'#94a3b8'}},
-      {type:'line',x0:-10,x1:10,y0:-Math.log10(pThresh),y1:-Math.log10(pThresh),line:{dash:'dash',color:'#94a3b8'}}
+      {type:'line',x0:-maxX,x1:maxX,y0:-Math.log10(pThresh),y1:-Math.log10(pThresh),line:{dash:'dash',color:'#94a3b8'}}
     ],
-    margin:{t:40,b:60,l:60,r:20}
+    margin:{t:50,b:60,l:60,r:20}
   };
   Plotly.newPlot('volcanoPlot',[trace],layout,{responsive:true});
 }
@@ -1463,9 +1541,47 @@ function renderNMDS() {
 // =====================================================================
 // HEATMAP
 // =====================================================================
+// =====================================================================
+// HIERARCHICAL CLUSTERING (complete linkage, Euclidean distance)
+// =====================================================================
+function hclust(rows) {
+  // rows: array of arrays. Returns permutation of row indices in dendrogram leaf order.
+  const n = rows.length;
+  if (n <= 1) return Array.from({length:n},(_,i)=>i);
+  // Pairwise Euclidean distances
+  const d = [];
+  for (let i = 0; i < n; i++) {
+    d[i] = [];
+    for (let j = 0; j < n; j++) {
+      let s = 0;
+      const ri = rows[i], rj = rows[j];
+      for (let k = 0; k < ri.length; k++) { const diff=(ri[k]||0)-(rj[k]||0); s+=diff*diff; }
+      d[i][j] = Math.sqrt(s);
+    }
+  }
+  // Agglomerative complete-linkage: each cluster = array of original leaf indices
+  const clust = Array.from({length:n}, (_,i) => [i]);
+  const act = Array.from({length:n}, (_,i) => i);
+  while (act.length > 1) {
+    let minD=Infinity, bi=-1, bj=-1;
+    for (let a=0; a<act.length; a++) {
+      for (let b=a+1; b<act.length; b++) {
+        const ca=clust[act[a]], cb=clust[act[b]];
+        let maxD=-Infinity;
+        for (const ii of ca) for (const jj of cb) if(d[ii][jj]>maxD) maxD=d[ii][jj];
+        if (maxD<minD) { minD=maxD; bi=a; bj=b; }
+      }
+    }
+    clust[act[bi]] = [...clust[act[bi]], ...clust[act[bj]]];
+    act.splice(bj, 1);
+  }
+  return clust[act[0]];
+}
+
 function renderHeatmap() {
   const n = parseInt(document.getElementById('heatmapN').value)||50;
   const rank = document.getElementById('heatmapRank').value;
+  const scope = document.getElementById('heatmapScope')?.value||'grouped';
   if (!APP.results || !APP.processed) return;
 
   let sorted = [...APP.results];
@@ -1476,23 +1592,76 @@ function renderHeatmap() {
     APP.plsda.vip.forEach((v,i)=>vipMap[APP.processed.compounds[i].name]=v);
     sorted.sort((a,b)=>(vipMap[b.name]||0)-(vipMap[a.name]||0));
   }
-  const top = sorted.slice(0,n);
-  const featureIdx = top.map(r=>r.idx);
-  const mat = APP.processed.scaledMat;
-  const z = featureIdx.map(fi=>mat.map(row=>row[fi]));
-  const featureNames = top.map(r=>r.name.length>35?r.name.slice(0,35)+'…':r.name);
-  const sampleNames = APP.processed.names;
+  const top = rank==='all' ? sorted : sorted.slice(0,n);
+  const actualN = Math.min(top.length, 500);
+  const topFeat = top.slice(0,actualN);
+  const featureNames = topFeat.map(r=>r.name.length>35?r.name.slice(0,35)+'…':r.name);
+
+  let z, sampleNames, titleSuffix;
+  if (scope==='all' && APP.raw) {
+    // Build all-samples z-scored matrix on the fly
+    const allSamples = APP.raw.sampleIds.map((id,si)=>{
+      const dispName = APP.config.sampleNames[si]||id;
+      const grp = APP.config.groups[si]||'(unassigned)';
+      return {id,dispName,grp,si};
+    });
+    const rawMat = APP.raw.matrix; // nSamples × nFeatures (raw areas)
+    const transMethod = document.querySelector('input[name=transMethod]:checked')?.value||'log2';
+    const nFeat = rawMat[0]?.length||0;
+    // Impute missing per feature
+    const imputed = rawMat.map(row=>[...row]);
+    for (let fi=0;fi<nFeat;fi++){
+      const vals=imputed.map(row=>row[fi]).filter(v=>v>0);
+      const fmin=vals.length?Math.min(...vals)/5:1;
+      imputed.forEach(row=>{if(!(row[fi]>0))row[fi]=fmin;});
+    }
+    // Transform
+    const transFunc = v => transMethod==='log2'?Math.log2(v+1):transMethod==='log10'?Math.log10(v+1):transMethod==='sqrt'?Math.sqrt(v):v;
+    const logMat = imputed.map(row=>row.map(transFunc));
+    // Z-score per feature across all samples
+    const zMat = logMat.map(row=>[...row]);
+    for (let fi=0;fi<nFeat;fi++){
+      const col=logMat.map(row=>row[fi]);
+      const m=mean(col), s=std(col)||1;
+      zMat.forEach((row,si)=>{row[fi]=(logMat[si][fi]-m)/s;});
+    }
+    z = topFeat.map(r=>allSamples.map(s=>zMat[s.si][r.idx]));
+    sampleNames = allSamples.map(s=>`${s.dispName}(${s.grp})`);
+    titleSuffix = 'all samples';
+  } else {
+    // Grouped samples only (APP.processed)
+    const mat = APP.processed.scaledMat;
+    z = topFeat.map(r=>mat.map(row=>row[r.idx]));
+    sampleNames = APP.processed.names;
+    titleSuffix = 'grouped samples';
+  }
+
+  // Hierarchical clustering (reorder rows & columns)
+  const doCluster = document.getElementById('heatmapCluster')?.checked;
+  if (doCluster && z.length > 2 && z[0].length > 2) {
+    try {
+      // Cluster rows (features): z is features × samples
+      const rowOrder = hclust(z);
+      z = rowOrder.map(i => z[i]);
+      featureNames = rowOrder.map(i => featureNames[i]);
+      // Cluster columns (samples): transpose, cluster, transpose back
+      const zt = z[0].map((_, j) => z.map(row => row[j]));
+      const colOrder = hclust(zt);
+      z = z.map(row => colOrder.map(j => row[j]));
+      sampleNames = colOrder.map(j => sampleNames[j]);
+    } catch(e) { console.warn('Clustering failed:', e); }
+  }
 
   Plotly.newPlot('heatmapPlot',[{
     z, x:sampleNames, y:featureNames, type:'heatmap',
     colorscale:'RdBu', reversescale:true,
     colorbar:{title:'Z-score',len:0.8}
   }],{
-    title:`Heatmap (Top ${n} features, ${rank} ranked)`,
+    title:`Heatmap (Top ${actualN} features, ${rank} ranked, ${titleSuffix}${doCluster?' · clustered':''})`,
     xaxis:{tickangle:-45,tickfont:{size:9}},
     yaxis:{tickfont:{size:9}},
-    margin:{l:250,t:60,b:130,r:100},
-    height:Math.max(500, n*14+200)
+    margin:{l:250,t:60,b:150,r:100},
+    height:Math.max(500, actualN*14+200)
   },{responsive:true});
 }
 
@@ -1613,6 +1782,7 @@ function showVizTab(id, el) {
   if (id==='barTab') { renderBar(); }
   if (id==='plsdaTab') renderPLSDA();
   if (id==='nmdsTab') renderNMDS();
+  if (id==='pathwayTab') renderPathwayMap();
 }
 
 // =====================================================================
@@ -1672,8 +1842,8 @@ function downloadCSV(rows, filename) {
 function exportWordReport() {
   showLoading('Generating Word report…','Capturing plot images…');
   const rpt={};
-  const checks=['rptOverview','rptStats','rptPCA','rptNMDS','rptVIP','rptHeatmap','rptBox','rptBar'];
-  checks.forEach(id=>rpt[id]=document.getElementById(id).checked);
+  const checks=['rptOverview','rptStats','rptPCA','rptNMDS','rptVIP','rptHeatmap','rptBox','rptBar','rptPathway'];
+  checks.forEach(id=>rpt[id]=document.getElementById(id)?.checked||false);
 
   const plotIds=[];
   if (rpt.rptPCA) plotIds.push({id:'pcaPlot',title:'Figure: PCA Score Plot'});
@@ -1683,7 +1853,17 @@ function exportWordReport() {
   if (rpt.rptBox) plotIds.push({id:'boxViolinPlot',title:'Figure: Box/Violin Plot'});
   if (rpt.rptBar) plotIds.push({id:'barPlot',title:'Figure: Bar Plot'});
 
+  // Capture SVG pathway map if requested
+  const pathwaySvgPromise = (rpt.rptPathway && APP.dataType==='polar') ?
+    svgToDataURL('pathwaySVG').then(dataURL=>({title:'Figure: Metabolic Pathway Map',dataURL})).catch(()=>null) :
+    Promise.resolve(null);
+
   captureAll(plotIds).then(images => {
+    return pathwaySvgPromise.then(pwImg => {
+      if (pwImg && pwImg.dataURL) images.push(pwImg);
+      return images;
+    });
+  }).then(images => {
     const html=buildWordHTML(images, rpt);
     const blob=new Blob([html],{type:'application/msword'});
     const a=document.createElement('a');
@@ -1698,6 +1878,30 @@ function exportWordReport() {
   });
 }
 
+function svgToDataURL(svgId) {
+  return new Promise((resolve,reject)=>{
+    try {
+      const svg=document.getElementById(svgId);
+      if (!svg) return reject(new Error('SVG not found'));
+      const serialized=new XMLSerializer().serializeToString(svg);
+      const blob=new Blob([serialized],{type:'image/svg+xml'});
+      const url=URL.createObjectURL(blob);
+      const img=new Image();
+      img.onload=()=>{
+        const canvas=document.createElement('canvas');
+        canvas.width=1100; canvas.height=800;
+        const ctx=canvas.getContext('2d');
+        ctx.fillStyle='#f8faff'; ctx.fillRect(0,0,canvas.width,canvas.height);
+        ctx.drawImage(img,0,0,canvas.width,canvas.height);
+        URL.revokeObjectURL(url);
+        resolve(canvas.toDataURL('image/png'));
+      };
+      img.onerror=()=>reject(new Error('SVG render failed'));
+      img.src=url;
+    } catch(e){reject(e);}
+  });
+}
+
 function captureAll(plotIds) {
   const promises=plotIds.map(({id,title})=>
     Plotly.toImage(document.getElementById(id),{format:'png',width:900,height:500})
@@ -1705,6 +1909,284 @@ function captureAll(plotIds) {
       .catch(()=>({title,dataURL:null}))
   );
   return Promise.all(promises);
+}
+
+// =====================================================================
+// PATHWAY MAP
+// =====================================================================
+// PATHWAY_DEFS: [label, x, y, w, h, fill, textColor, strokeColor]  (rectangle top-left)
+const PATHWAY_DEFS=[
+  ['Glycolysis',       220,270,180,350,'#dbeafe','#1e3a5f','#3b82f6'],
+  ['TCA Cycle',        510,360,270,280,'#dcfce7','#14532d','#22c55e'],
+  ['PPP',              340,120,190,200,'#fef3c7','#78350f','#f59e0b'],
+  ['Purine Met.',      590, 70,270,185,'#ede9fe','#3730a3','#8b5cf6'],
+  ['Pyrimidine Met.',  100,110,210,165,'#fce7f3','#9d174d','#ec4899'],
+  ['Urea Cycle',       810,500,165,165,'#fff7ed','#9a3412','#f97316'],
+  ['Choline Met.',      55,335,155,110,'#f0f9ff','#0c4a6e','#0ea5e9'],
+];
+
+const PATHWAY_NODES={
+  'citric acid':[620,430,'TCA Cycle'],'isocitric acid':[700,400,'TCA Cycle'],
+  'alpha-ketoglutaric acid':[760,450,'TCA Cycle'],'alpha-kg':[760,450,'TCA Cycle'],
+  'succinic acid':[730,560,'TCA Cycle'],'fumaric acid':[640,590,'TCA Cycle'],
+  'malic acid':[560,570,'TCA Cycle'],'oxaloacetic acid':[530,480,'TCA Cycle'],'oaa':[530,480,'TCA Cycle'],
+  'cis-aconitic acid':[680,415,'TCA Cycle'],
+  'glucose-6-phosphate':[310,310,'Glycolysis/PPP'],'g6p':[310,310,'Glycolysis/PPP'],
+  'fructose-6-phosphate':[310,360,'Glycolysis'],'glucose-1-phosphate':[255,310,'Glycolysis'],
+  'phosphoenolpyruvic acid':[310,450,'Glycolysis'],'pep':[310,450,'Glycolysis'],
+  'pyruvic acid':[310,510,'Glycolysis'],'pyruvate':[310,510,'Glycolysis'],
+  'lactic acid':[225,545,'Glycolysis'],'lactate':[225,545,'Glycolysis'],
+  '2-phosphoglyceric acid':[310,420,'Glycolysis'],'3-phosphoglyceric acid':[310,390,'Glycolysis'],
+  'ribose-5-phosphate':[460,200,'PPP'],'r5p':[460,200,'PPP'],
+  'ribulose-5-phosphate':[530,185,'PPP'],'ru5p':[530,185,'PPP'],
+  'erythrose-4-phosphate':[420,260,'PPP'],'e4p':[420,260,'PPP'],
+  '6-phosphogluconic acid':[370,235,'PPP'],'6-pgl':[370,235,'PPP'],
+  'sedoheptulose-7-phosphate':[490,240,'PPP'],'s7p':[490,240,'PPP'],
+  'amp':[650,150,'Purine Metabolism'],'adenosine monophosphate':[650,150,'Purine Metabolism'],
+  'adp':[620,115,'Purine Metabolism'],'adenosine diphosphate':[620,115,'Purine Metabolism'],
+  'atp':[590,80,'Purine Metabolism'],
+  'gmp':[720,155,'Purine Metabolism'],'guanosine monophosphate':[720,155,'Purine Metabolism'],
+  'gdp':[790,130,'Purine Metabolism'],'guanosine diphosphate':[790,130,'Purine Metabolism'],
+  'imp':[680,195,'Purine Metabolism'],'inosine monophosphate':[680,195,'Purine Metabolism'],
+  'idp':[740,210,'Purine Metabolism'],'inosine diphosphate':[740,210,'Purine Metabolism'],
+  'camp':[800,115,'Purine Metabolism'],'adenosine 3,5-cyclic monophosphate':[800,115,'Purine Metabolism'],
+  'adenosine':[590,130,'Purine Metabolism'],'inosine':[640,225,'Purine Metabolism'],
+  'xanthine':[820,200,'Purine Metabolism'],'hypoxanthine':[780,235,'Purine Metabolism'],
+  'guanosine':[770,175,'Purine Metabolism'],'xanthosine':[840,165,'Purine Metabolism'],
+  'cytidine':[160,175,'Pyrimidine Met.'],'uridine':[240,165,'Pyrimidine Met.'],
+  'thymidine':[155,230,'Pyrimidine Met.'],
+  'cdp-choline':[115,300,'Choline Met.'],'cytidine diphosphate choline':[115,300,'Choline Met.'],
+  'choline':[110,360,'Choline Met.'],
+  'alanine':[340,560,'Amino Acids'],'ala':[340,560,'Amino Acids'],
+  'arginine':[890,560,'Urea Cycle'],'arg':[890,560,'Urea Cycle'],
+  'ornithine':[870,510,'Urea Cycle'],'citrulline':[930,530,'Urea Cycle'],
+  'asparagine':[510,445,'Amino Acids'],'asn':[510,445,'Amino Acids'],
+  'aspartic acid':[510,410,'Amino Acids'],'asp':[510,410,'Amino Acids'],'aspartate':[510,410,'Amino Acids'],
+  'glutamine':[780,510,'Amino Acids'],'gln':[780,510,'Amino Acids'],
+  'glutamic acid':[800,465,'Amino Acids'],'glu':[800,465,'Amino Acids'],'glutamate':[800,465,'Amino Acids'],
+  'glycine':[405,620,'Amino Acids'],'gly':[405,620,'Amino Acids'],
+  'serine':[365,600,'Amino Acids'],'ser':[365,600,'Amino Acids'],
+  'threonine':[440,600,'Amino Acids'],'thr':[440,600,'Amino Acids'],
+  'tryptophan':[155,360,'Amino Acids'],'trp':[155,360,'Amino Acids'],
+  'tyrosine':[195,410,'Amino Acids'],'tyr':[195,410,'Amino Acids'],
+  'phenylalanine':[160,445,'Amino Acids'],'phe':[160,445,'Amino Acids'],
+  'proline':[850,610,'Amino Acids'],'pro':[850,610,'Amino Acids'],
+  'histidine':[820,270,'Amino Acids'],'his':[820,270,'Amino Acids'],
+  'valine':[945,360,'Amino Acids'],'val':[945,360,'Amino Acids'],
+  'leucine':[970,400,'Amino Acids'],'leu':[970,400,'Amino Acids'],
+  'isoleucine':[960,440,'Amino Acids'],'ile':[960,440,'Amino Acids'],
+  'lysine':[470,660,'Amino Acids'],'lys':[470,660,'Amino Acids'],
+  'methionine':[215,490,'Amino Acids'],'met':[215,490,'Amino Acids'],
+  'cysteine':[200,535,'Amino Acids'],'cys':[200,535,'Amino Acids'],
+  'gamma-aminobutyric acid':[840,510,'Amino Acids'],'gaba':[840,510,'Amino Acids'],
+  'nicotinamide':[100,345,'Choline Met.'],'nicotinic acid':[100,390,'Choline Met.'],
+  'acetyl-coa':[480,490,'TCA Cycle'],'acetylcarnitine':[430,520,'TCA Cycle'],
+};
+
+function fcToColor(fc,maxFC){
+  if(maxFC===0)return'#e2e8f0';
+  const t=Math.max(-1,Math.min(1,fc/maxFC));
+  if(t>0){const g=Math.round(38+180*(1-t)),b=Math.round(38+180*(1-t));return`rgb(220,${Math.max(38,g)},${Math.max(38,b)})`;}
+  else{const u=-t,r=Math.round(37+180*(1-u)),g=Math.round(99+150*(1-u));return`rgb(${Math.max(37,r)},${Math.max(99,g)},235)`;}
+}
+
+function renderPathwayMap(){
+  if(!APP.results||!APP.processed){
+    document.getElementById('pathwayAlert').innerHTML='<div class="alert alert-warning">Please run analysis first.</div>';return;
+  }
+  if(APP.dataType!=='polar'){
+    document.getElementById('pathwayAlert').innerHTML='<div class="alert alert-warning">Pathway map is only available for polar metabolite data.</div>';return;
+  }
+  document.getElementById('pathwayAlert').innerHTML='';
+  const grpA=document.getElementById('pathGrpA')?.value;
+  const grpB=document.getElementById('pathGrpB')?.value;
+  const fdrThresh=parseFloat(document.getElementById('pathFdrThresh')?.value||0.05);
+  const grps=APP.processed.groups,mat=APP.processed.mat;
+  const allCmps=APP.processed.compounds;
+
+  // ── Build stat map for ALL compounds ──────────────────────────────────
+  const compStat={};
+  if(grpA&&grpB&&grpA!==grpB){
+    const idxA=grps.map((g,i)=>g===grpA?i:-1).filter(i=>i>=0);
+    const idxB=grps.map((g,i)=>g===grpB?i:-1).filter(i=>i>=0);
+    allCmps.forEach((cmp,fi)=>{
+      const vA=idxA.map(i=>mat[i][fi]),vB=idxB.map(i=>mat[i][fi]);
+      const fc=mean(vB)-mean(vA),pv=Math.max(1e-300,welchTTest(vA,vB));
+      compStat[fi]={fc,pvalue:pv,fdr:pv,sig:false,name:cmp.name};
+    });
+    // BH FDR correction
+    const sorted=Object.values(compStat).sort((a,b)=>a.pvalue-b.pvalue);
+    const m=sorted.length;
+    sorted.forEach((v,i)=>{v.fdr=Math.min(1,v.pvalue*m/(i+1));});
+    for(let i=m-2;i>=0;i--) sorted[i].fdr=Math.min(sorted[i].fdr,sorted[i+1].fdr);
+    Object.values(compStat).forEach(v=>{v.sig=v.fdr<fdrThresh;});
+  } else {
+    APP.results.forEach(r=>{compStat[r.idx]={fc:r.fc,pvalue:r.pvalue,fdr:r.fdr,sig:r.fdr<fdrThresh,name:r.name};});
+    allCmps.forEach((cmp,fi)=>{if(!compStat[fi])compStat[fi]={fc:0,pvalue:1,fdr:1,sig:false,name:cmp.name};});
+  }
+
+  // ── Match compounds to PATHWAY_NODES ──────────────────────────────────
+  const mappedByCoord={};  // "x,y" → {x,y,pw,...stat}
+  const mappedFiSet=new Set();
+  allCmps.forEach((cmp,fi)=>{
+    const stat=compStat[fi];
+    const lc=cmp.name.toLowerCase().trim();
+    let nd=null;
+    if(PATHWAY_NODES[lc]){ nd=PATHWAY_NODES[lc]; }
+    else { for(const [k,v] of Object.entries(PATHWAY_NODES)){if(lc.includes(k)||k.includes(lc)){nd=v;break;}} }
+    if(nd){
+      const [nx,ny,pw]=nd, ck=`${nx},${ny}`;
+      if(!mappedByCoord[ck]||stat.sig) mappedByCoord[ck]={x:nx,y:ny,pw,...stat};
+      mappedFiSet.add(fi);
+    }
+  });
+  const mappedNodes=Object.values(mappedByCoord);
+  const unmappedNodes=allCmps.map((cmp,fi)=>({fi,...(compStat[fi]||{fc:0,pvalue:1,fdr:1,sig:false,name:cmp.name})}))
+    .filter(({fi})=>!mappedFiSet.has(fi));
+
+  const allFC=Object.values(compStat).map(s=>Math.abs(s.fc)).filter(v=>isFinite(v)&&v>0);
+  const maxFC=allFC.length?Math.max(...allFC):1;
+
+  // ── Build SVG ─────────────────────────────────────────────────────────
+  const W=1100;
+  const MAIN_H=800;
+  const uCols=10;
+  const uRows=Math.ceil(unmappedNodes.length/uCols);
+  const UNMAPPED_H=uRows>0?uRows*34+64:0;
+  const H=MAIN_H+UNMAPPED_H;
+
+  const F='Arial,sans-serif';
+  let svg=`<svg id="pathwaySVG" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;display:block;background:#eef3fa;font-family:${F}">`;
+
+  // Grid background (circuit-board feel)
+  svg+=`<defs>
+    <pattern id="cgrid" width="25" height="25" patternUnits="userSpaceOnUse">
+      <path d="M 25 0 L 0 0 0 25" fill="none" stroke="#c8d8ec" stroke-width="0.4"/>
+    </pattern>
+  </defs>
+  <rect width="${W}" height="${H}" fill="url(#cgrid)"/>
+  <rect width="${W}" height="${MAIN_H}" fill="#eef3fa" opacity="0.55"/>`;
+
+  // Title
+  svg+=`<text x="${W/2}" y="28" text-anchor="middle" font-size="14" font-weight="bold" fill="#1a3a5c">Metabolic Pathway Map — ${grpB||'Case'} vs ${grpA||'Control'} (Log2 FC)</text>`;
+  svg+=`<text x="${W/2}" y="44" text-anchor="middle" font-size="9.5" fill="#64748b">All ${allCmps.length} compounds shown · ${mappedNodes.length} mapped · ${unmappedNodes.length} unmapped</text>`;
+
+  // Pathway region boxes (circuit-board rectangles)
+  PATHWAY_DEFS.forEach(([label,rx,ry,rw,rh,fill,tc,sc])=>{
+    svg+=`<rect x="${rx}" y="${ry}" width="${rw}" height="${rh}" fill="${fill}" stroke="${sc}" stroke-width="2" rx="3" opacity="0.82"/>`;
+    // Header stripe
+    svg+=`<rect x="${rx}" y="${ry}" width="${rw}" height="18" fill="${sc}" opacity="0.28" rx="3"/>`;
+    svg+=`<text x="${rx+rw/2}" y="${ry+13}" text-anchor="middle" font-size="10" font-weight="bold" fill="${tc}">${label}</text>`;
+  });
+
+  // Right-angle (orthogonal) connector paths — circuit-board style
+  [
+    // Glycolysis vertical flow
+    ['M 310 290 L 310 615', '#3b82f6', 2, 0.5],
+    // Glycolysis → TCA (pyruvate → acetyl-CoA)
+    ['M 310 510 L 460 510 L 460 445 L 510 445', '#3b82f6', 1.5, 0.6],
+    // TCA internal ring
+    ['M 530 480 L 510 480 L 510 430 L 620 430', '#22c55e', 2, 0.6],
+    ['M 620 430 L 760 430 L 760 450', '#22c55e', 2, 0.6],
+    ['M 760 450 L 790 450 L 790 560 L 730 560', '#22c55e', 2, 0.6],
+    ['M 730 560 L 640 560 L 640 590', '#22c55e', 2, 0.6],
+    ['M 640 590 L 560 590 L 560 570', '#22c55e', 2, 0.6],
+    ['M 560 570 L 540 570 L 540 480 L 530 480', '#22c55e', 1.5, 0.5],
+    // Glycolysis ↔ PPP branch
+    ['M 340 310 L 310 310', '#f59e0b', 1.5, 0.65],
+    ['M 340 170 L 310 170 L 310 310', '#f59e0b', 1.5, 0.65],
+    // PPP → Purine
+    ['M 530 155 L 590 155', '#8b5cf6', 1.5, 0.65],
+    // TCA → Amino Acids (glutamate axis)
+    ['M 790 640 L 790 570 L 760 570 L 760 450', '#16a34a', 1.5, 0.5],
+    // Urea ↔ Amino Acids
+    ['M 893 665 L 893 620', '#f97316', 1.5, 0.6],
+    ['M 893 500 L 893 445 L 975 445 L 975 500', '#f97316', 1.5, 0.6],
+    // Choline ↔ Glycolysis
+    ['M 210 390 L 220 390', '#0ea5e9', 1.5, 0.6],
+    // Pyrimidine ↔ PPP
+    ['M 310 185 L 340 185', '#ec4899', 1.5, 0.6],
+  ].forEach(([d,col,sw,op])=>{
+    svg+=`<path d="${d}" stroke="${col}" stroke-width="${sw}" fill="none" opacity="${op}" stroke-linecap="square" stroke-linejoin="miter"/>`;
+  });
+
+  // Draw ALL mapped compound nodes (both significant and not)
+  mappedNodes.forEach(h=>{
+    const sig=h.sig;
+    const col=sig?fcToColor(h.fc,maxFC):'#e8edf4';
+    const r=sig?9:5.5;
+    const stroke=sig?'#334155':'#8899aa';
+    const sw=sig?1.6:0.8;
+    const short=h.name.length>14?h.name.slice(0,14)+'…':h.name;
+    const fcStr=h.fc.toFixed(2),pStr=h.pvalue<0.001?h.pvalue.toExponential(1):h.pvalue.toFixed(3);
+    svg+=`<circle cx="${h.x}" cy="${h.y}" r="${r}" fill="${col}" stroke="${stroke}" stroke-width="${sw}">
+      <title>${h.name}&#10;Pathway: ${h.pw}&#10;Log2FC: ${fcStr}&#10;p: ${pStr}&#10;FDR: ${h.fdr.toFixed(3)}</title></circle>`;
+    // Always show labels; sig in dark, non-sig in lighter gray
+    const lf=sig?'#1e293b':'#7a8ea0', ls=sig?7.5:6;
+    svg+=`<text x="${h.x}" y="${h.y-r-2}" text-anchor="middle" font-size="${ls}" fill="${lf}">${short}</text>`;
+  });
+
+  // Color bar legend
+  const lx=38,ly=754,lw=210,lh=12;
+  svg+=`<text x="${lx}" y="${ly-6}" font-size="9" fill="#64748b">↓ Down-reg.</text>`;
+  svg+=`<text x="${lx+lw}" y="${ly-6}" font-size="9" fill="#64748b" text-anchor="end">↑ Up-reg.</text>`;
+  for(let i=0;i<30;i++){
+    const t=i/30,fc=(t*2-1)*maxFC,c=fcToColor(fc,maxFC);
+    svg+=`<rect x="${lx+i*(lw/30)}" y="${ly}" width="${lw/30+1}" height="${lh}" fill="${c}"/>`;
+  }
+  svg+=`<rect x="${lx}" y="${ly}" width="${lw}" height="${lh}" fill="none" stroke="#94a3b8" stroke-width="0.6"/>`;
+  svg+=`<text x="${lx+lw/2}" y="${ly+lh+12}" font-size="8" fill="#64748b" text-anchor="middle">Log2FC ±${maxFC.toFixed(2)}</text>`;
+  const legX=lx+lw+28;
+  svg+=`<circle cx="${legX+7}" cy="${ly+6}" r="8.5" fill="#fca5a5" stroke="#334155" stroke-width="1.5"/>`;
+  svg+=`<text x="${legX+22}" y="${ly+10}" font-size="9" fill="#374151">Sig. (FDR&lt;${fdrThresh})</text>`;
+  svg+=`<circle cx="${legX+7}" cy="${ly+25}" r="5" fill="#e8edf4" stroke="#8899aa" stroke-width="0.8"/>`;
+  svg+=`<text x="${legX+22}" y="${ly+29}" font-size="9" fill="#374151">Not significant</text>`;
+  if(unmappedNodes.length){
+    svg+=`<rect x="${legX+2}" y="${ly+38}" width="10" height="10" fill="#f0f9ff" stroke="#0ea5e9" stroke-width="1" rx="2"/>`;
+    svg+=`<text x="${legX+22}" y="${ly+47}" font-size="9" fill="#374151">Unmapped (below)</text>`;
+  }
+
+  // ── Unmapped compounds section ────────────────────────────────────────
+  if(unmappedNodes.length>0){
+    const uy0=MAIN_H+10;
+    svg+=`<rect x="30" y="${uy0}" width="${W-60}" height="${UNMAPPED_H-10}" fill="#f8fafc" stroke="#94a3b8" stroke-width="1.2" rx="4"/>`;
+    svg+=`<rect x="30" y="${uy0}" width="${W-60}" height="20" fill="#94a3b8" opacity="0.2" rx="4"/>`;
+    svg+=`<text x="42" y="${uy0+14}" font-size="10" font-weight="bold" fill="#475569">Unmapped Compounds (${unmappedNodes.length}) — not in pathway database</text>`;
+    unmappedNodes.forEach((u,i)=>{
+      const col_i=i%uCols, row_i=Math.floor(i/uCols);
+      const ux=42+col_i*((W-70)/uCols), uy2=uy0+26+row_i*33;
+      const sig=u.sig;
+      const fillCol=sig?fcToColor(u.fc,maxFC):'#e2e8f0';
+      const stroke=sig?'#334155':'#94a3b8';
+      const short=u.name.length>13?u.name.slice(0,13)+'…':u.name;
+      svg+=`<rect x="${ux}" y="${uy2}" width="${(W-80)/uCols-4}" height="22" fill="${fillCol}" stroke="${stroke}" stroke-width="${sig?1.2:0.6}" rx="3">
+        <title>${u.name}&#10;Log2FC: ${u.fc.toFixed(2)}&#10;p: ${u.pvalue.toFixed(3)}&#10;FDR: ${u.fdr.toFixed(3)}&#10;Not in pathway database</title></rect>`;
+      svg+=`<text x="${ux+((W-80)/uCols-4)/2}" y="${uy2+14}" text-anchor="middle" font-size="7" fill="${sig?'#1e293b':'#64748b'}">${short}</text>`;
+    });
+  }
+
+  svg+=`</svg>`;
+  document.getElementById('pathwayMapContainer').innerHTML=svg;
+
+  // ── Hit list table ────────────────────────────────────────────────────
+  const sigMapped=mappedNodes.filter(h=>h.sig).sort((a,b)=>a.fdr-b.fdr);
+  const sigUnmapped=unmappedNodes.filter(u=>u.sig).sort((a,b)=>a.fdr-b.fdr);
+  let tbl=`<div style="font-weight:600;margin-bottom:6px">
+    Total: ${allCmps.length} compounds · ${mappedNodes.length} pathway-mapped · ${unmappedNodes.length} unmapped · <span style="color:#dc2626">${sigMapped.length+sigUnmapped.length} significant (FDR&lt;${fdrThresh})</span></div>`;
+  if(sigMapped.length+sigUnmapped.length>0){
+    tbl+=`<div style="overflow-x:auto"><table class="stats-table" style="max-width:760px"><thead><tr>
+      <th>Compound</th><th>Pathway</th><th>Log2FC</th><th>p-value</th><th>FDR</th>
+    </tr></thead><tbody>`;
+    [...sigMapped,...sigUnmapped].forEach(h=>{
+      const dir=h.fc>0?'↑':'↓',dcol=h.fc>0?'#dc2626':'#2563a8';
+      tbl+=`<tr><td>${h.name}</td><td>${h.pw||'<i>unmapped</i>'}</td>
+        <td style="color:${dcol};font-weight:600">${dir} ${h.fc.toFixed(3)}</td>
+        <td>${h.pvalue.toExponential(2)}</td><td>${h.fdr.toExponential(2)}</td></tr>`;
+    });
+    tbl+='</tbody></table></div>';
+  }
+  document.getElementById('pathwayHitList').innerHTML=tbl;
+  document.getElementById('pathwayLegend').innerHTML='';
 }
 
 function buildWordHTML(images, rpt) {
