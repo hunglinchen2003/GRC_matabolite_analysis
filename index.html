@@ -119,18 +119,39 @@ select.group-assign{width:100%}
 <!-- STEP 1: UPLOAD -->
 <div id="step1" class="tab-content active">
 <div class="card">
+  <div class="section-title">🧬 Project Type</div>
+  <div class="norm-opt" style="margin-bottom:0">
+    <label><input type="radio" name="projectMode" value="polar" checked onchange="setProjectMode('polar')"> <b>Polar metabolites only</b> (water-soluble, HILIC/RPLC)</label>
+    <label><input type="radio" name="projectMode" value="nonpolar" onchange="setProjectMode('nonpolar')"> <b>Non-polar / Lipid metabolites only</b> (C18 lipidomics)</label>
+    <label><input type="radio" name="projectMode" value="both" onchange="setProjectMode('both')"> <b>Both polar + non-polar</b> — shows separate and integrated pathway maps</label>
+  </div>
+</div>
+<div class="card">
   <div class="section-title">📂 Upload Metabolomics Data</div>
   <div class="alert alert-info">
-    Supports non-polar (C18 lipid) and polar metabolite Excel files exported from MassHunter / Skyline.<br>
-    Expected format: Row 1 = Sample IDs (columns E+), Row 2 = Headers, Row 3+ = Compound data.
+    Expected format: Row 1 = Sample IDs (columns E+), Row 2 = Headers, Row 3+ = Compound data.<br>
+    Polar: col B=Name | Non-polar: col D=Name.
   </div>
-  <div class="upload-zone" id="uploadZone">
-    <div class="icon">📊</div>
-    <div style="font-size:1rem;font-weight:600;color:#2563a8;margin-top:6px">Drop Excel file here or click to browse</div>
-    <p>Accepts .xlsx / .xls format</p>
-    <input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none">
+  <div id="polarUploadSection">
+    <div style="font-weight:600;color:#374151;margin-bottom:6px" id="polarUploadLabel">📊 Polar Metabolite Data</div>
+    <div class="upload-zone" id="uploadZone">
+      <div class="icon">📊</div>
+      <div style="font-size:1rem;font-weight:600;color:#2563a8;margin-top:6px">Drop Excel file here or click to browse</div>
+      <p>Accepts .xlsx / .xls format</p>
+      <input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none">
+    </div>
+    <div id="fileInfo" style="display:none;margin-top:14px"></div>
   </div>
-  <div id="fileInfo" style="display:none;margin-top:14px"></div>
+  <div id="nonpolarUploadSection" style="display:none;margin-top:18px;padding-top:18px;border-top:1px dashed #e2e8f0">
+    <div style="font-weight:600;color:#374151;margin-bottom:6px">🫙 Non-polar / Lipid Data</div>
+    <div class="upload-zone" id="uploadZoneNP">
+      <div class="icon">🫙</div>
+      <div style="font-size:1rem;font-weight:600;color:#7c3aed;margin-top:6px">Drop non-polar Excel file here or click to browse</div>
+      <p>Accepts .xlsx / .xls format</p>
+      <input type="file" id="fileInputNP" accept=".xlsx,.xls" style="display:none">
+    </div>
+    <div id="fileInfoNP" style="display:none;margin-top:14px"></div>
+  </div>
 </div>
 <div id="stepNav" style="justify-content:flex-end">
   <button class="btn btn-primary" id="toStep2Btn" style="display:none" onclick="goStep(2)">Next: Configure Samples →</button>
@@ -163,7 +184,13 @@ select.group-assign{width:100%}
       <div id="groupNamePreview" style="margin-top:4px"></div>
     </div>
   </div>
-  <div style="margin-bottom:8px;font-weight:600;color:#1a3a5c;font-size:13px">Sample Assignment Table</div>
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+    <span style="font-weight:600;color:#1a3a5c;font-size:13px">Sample Assignment Table</span>
+    <div style="margin-left:auto;display:flex;gap:6px">
+      <button class="btn btn-sm" style="background:#0ea5e9;color:#fff;padding:4px 10px;font-size:12px" onclick="saveSampleConfig()" title="Export sample configuration as JSON">💾 Save Config</button>
+      <label class="btn btn-sm" style="background:#7c3aed;color:#fff;padding:4px 10px;font-size:12px;cursor:pointer;margin:0" title="Import previously saved configuration">📂 Load Config<input type="file" accept=".json" style="display:none" onchange="loadSampleConfig(event)"></label>
+    </div>
+  </div>
   <div id="sampleConfigArea" style="overflow-x:auto;max-height:500px;overflow-y:auto"></div>
 </div>
 <div class="card">
@@ -258,6 +285,13 @@ select.group-assign{width:100%}
     <button class="btn btn-primary" onclick="runProcessing()">▶ Run Processing &amp; Analysis</button>
   </div>
   <div id="processingLog" style="margin-top:14px;font-size:12px;color:#475569;white-space:pre-wrap"></div>
+  <!-- Non-polar analysis (shown only when projectMode='both') -->
+  <div id="nonpolarAnalysisSection" style="display:none;margin-top:16px;padding:14px;background:#f5f3ff;border-radius:8px;border:1px dashed #8b5cf6">
+    <div style="font-weight:600;color:#7c3aed;margin-bottom:6px">🫙 Non-polar / Lipid Data Analysis</div>
+    <div style="font-size:12px;color:#64748b;margin-bottom:10px">Uses the same sample group configuration. Run polar analysis first, then analyze non-polar data below.</div>
+    <button class="btn btn-sm" style="background:#7c3aed;color:#fff;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-weight:600" onclick="runNonpolarProcessing()">▶ Analyze Non-polar Data</button>
+    <div id="npProcessingStatus" style="margin-top:8px;font-size:12px;color:#475569;white-space:pre-wrap"></div>
+  </div>
 </div>
 <div id="stepNav" style="display:flex;gap:8px;justify-content:space-between">
   <button class="btn btn-secondary" onclick="goStep(2)">← Back</button>
@@ -311,7 +345,9 @@ select.group-assign{width:100%}
     <div class="tab" onclick="showVizTab('heatmapTab',this)">Heatmap</div>
     <div class="tab" onclick="showVizTab('boxTab',this)">Box / Violin</div>
     <div class="tab" onclick="showVizTab('barTab',this)">Bar Plots</div>
-    <div class="tab" onclick="showVizTab('pathwayTab',this)">Pathway Map</div>
+    <div class="tab" onclick="showVizTab('pathwayTab',this)">Polar Pathway</div>
+    <div class="tab" id="lipidPathwayTabBtn" style="display:none" onclick="showVizTab('lipidPathwayTab',this)">Lipid Pathway</div>
+    <div class="tab" id="integratedPathwayTabBtn" style="display:none" onclick="showVizTab('integratedPathwayTab',this)">Integrated Pathway</div>
   </div>
   <div id="pcaTab" class="tab-content active">
     <div class="two-col" style="margin-bottom:10px">
@@ -384,11 +420,13 @@ select.group-assign{width:100%}
     <div id="topBarPlots" style="margin-top:10px"></div>
   </div>
   <div id="pathwayTab" class="tab-content">
-    <div class="alert alert-info" style="margin-bottom:10px">Polar metabolite pathway map — compound nodes colored by fold change (Group B vs Group A). Only available after analysis of polar data.</div>
-    <div class="row" style="margin-bottom:10px;align-items:flex-end">
-      <div class="col" style="max-width:180px"><label>Group A (reference)</label><select id="pathGrpA" style="width:100%"></select></div>
-      <div class="col" style="max-width:180px"><label>Group B (vs A)</label><select id="pathGrpB" style="width:100%"></select></div>
-      <div class="col" style="max-width:120px"><label>FDR threshold</label><input type="number" id="pathFdrThresh" value="0.05" min="0" max="1" step="0.01" style="width:100%"></div>
+    <div class="alert alert-info" style="margin-bottom:10px">Pathway map powered by PathVisio GPML — nodes colored red (up) / green (down) / yellow (no change). All metabolites shown; significant nodes have bold borders.</div>
+    <div class="row" style="margin-bottom:6px;align-items:flex-end;flex-wrap:wrap;gap:8px">
+      <div class="col" style="max-width:160px"><label>Group A (reference)</label><select id="pathGrpA" style="width:100%"></select></div>
+      <div class="col" style="max-width:160px"><label>Group B (vs A)</label><select id="pathGrpB" style="width:100%"></select></div>
+      <div class="col" style="max-width:130px"><label>Show metabolites</label><select id="pathShowMode" style="width:100%"><option value="all">All mapped</option><option value="sig">Significant only (highlight border)</option></select></div>
+      <div class="col" style="max-width:110px"><label>|Log2 FC| &ge;</label><input type="number" id="pathFcThresh" value="0.5" min="0" step="0.1" style="width:100%"></div>
+      <div class="col" style="max-width:110px"><label>FDR &le;</label><input type="number" id="pathFdrThresh" value="0.05" min="0" max="1" step="0.01" style="width:100%"></div>
       <div><button class="btn btn-primary btn-sm" onclick="renderPathwayMap()">Update Map</button></div>
     </div>
     <div id="pathwayAlert"></div>
@@ -397,6 +435,40 @@ select.group-assign{width:100%}
     </div>
     <div id="pathwayLegend" style="margin-top:8px;font-size:12px;color:#64748b;display:flex;gap:16px;align-items:center;flex-wrap:wrap"></div>
     <div id="pathwayHitList" style="margin-top:10px;font-size:12px"></div>
+  </div>
+  <div id="lipidPathwayTab" class="tab-content">
+    <div class="alert alert-info" style="margin-bottom:10px">Non-polar lipid pathway (PathVisio GPML, 317 nodes) — red=up, green=down, yellow=no change. Analyze non-polar data in Step 3 first.</div>
+    <div class="row" style="margin-bottom:6px;align-items:flex-end;flex-wrap:wrap;gap:8px">
+      <div class="col" style="max-width:160px"><label>Group A (reference)</label><select id="lipidPathGrpA" style="width:100%"></select></div>
+      <div class="col" style="max-width:160px"><label>Group B (vs A)</label><select id="lipidPathGrpB" style="width:100%"></select></div>
+      <div class="col" style="max-width:130px"><label>Show metabolites</label><select id="lipidPathShowMode" style="width:100%"><option value="all">All mapped</option><option value="sig">Significant only (highlight border)</option></select></div>
+      <div class="col" style="max-width:110px"><label>|Log2 FC| &ge;</label><input type="number" id="lipidPathFcThresh" value="0.5" min="0" step="0.1" style="width:100%"></div>
+      <div class="col" style="max-width:110px"><label>FDR &le;</label><input type="number" id="lipidPathFdrThresh" value="0.05" min="0" max="1" step="0.01" style="width:100%"></div>
+      <div><button class="btn btn-primary btn-sm" onclick="renderLipidPathway()">Update Map</button></div>
+    </div>
+    <div id="lipidPathwayAlert"></div>
+    <div id="lipidPathwayMapContainer" style="overflow:auto;border:1px solid #e2e8f0;border-radius:8px;background:#f8faff;min-height:520px">
+      <svg id="lipidPathwaySVG" style="width:100%;display:block"></svg>
+    </div>
+    <div id="lipidPathwayLegend" style="margin-top:8px;font-size:12px;color:#64748b;display:flex;gap:16px;align-items:center;flex-wrap:wrap"></div>
+    <div id="lipidPathwayHitList" style="margin-top:10px;font-size:12px"></div>
+  </div>
+  <div id="integratedPathwayTab" class="tab-content">
+    <div class="alert alert-info" style="margin-bottom:10px">Integrated pathway (203 nodes, polar + non-polar combined) — merges both datasets. Load and analyze both polar and non-polar data first.</div>
+    <div class="row" style="margin-bottom:6px;align-items:flex-end;flex-wrap:wrap;gap:8px">
+      <div class="col" style="max-width:160px"><label>Group A (reference)</label><select id="intPathGrpA" style="width:100%"></select></div>
+      <div class="col" style="max-width:160px"><label>Group B (vs A)</label><select id="intPathGrpB" style="width:100%"></select></div>
+      <div class="col" style="max-width:130px"><label>Show metabolites</label><select id="intPathShowMode" style="width:100%"><option value="all">All mapped</option><option value="sig">Significant only (highlight border)</option></select></div>
+      <div class="col" style="max-width:110px"><label>|Log2 FC| &ge;</label><input type="number" id="intPathFcThresh" value="0.5" min="0" step="0.1" style="width:100%"></div>
+      <div class="col" style="max-width:110px"><label>FDR &le;</label><input type="number" id="intPathFdrThresh" value="0.05" min="0" max="1" step="0.01" style="width:100%"></div>
+      <div><button class="btn btn-primary btn-sm" onclick="renderIntegratedPathway()">Update Map</button></div>
+    </div>
+    <div id="intPathwayAlert"></div>
+    <div id="intPathwayMapContainer" style="overflow:auto;border:1px solid #e2e8f0;border-radius:8px;background:#f8faff;min-height:520px">
+      <svg id="intPathwaySVG" style="width:100%;display:block"></svg>
+    </div>
+    <div id="intPathwayLegend" style="margin-top:8px;font-size:12px;color:#64748b;display:flex;gap:16px;align-items:center;flex-wrap:wrap"></div>
+    <div id="intPathwayHitList" style="margin-top:10px;font-size:12px"></div>
   </div>
 </div>
 <div id="stepNav" style="display:flex;gap:8px;justify-content:space-between">
@@ -442,7 +514,9 @@ select.group-assign{width:100%}
     <label><input type="checkbox" id="rptHeatmap" checked> Heatmap</label>
     <label><input type="checkbox" id="rptBox" checked> Box/Violin Plots (top 10 sig)</label>
     <label><input type="checkbox" id="rptBar" checked> Bar Plots (top 10 sig)</label>
-    <label><input type="checkbox" id="rptPathway"> Pathway Map (polar data only)</label>
+    <label><input type="checkbox" id="rptPathway"> Polar Pathway Map</label>
+    <label><input type="checkbox" id="rptLipidPathway"> Lipid Pathway Map</label>
+    <label><input type="checkbox" id="rptIntPathway"> Integrated Pathway Map</label>
   </div>
   <button class="btn btn-warning" onclick="exportWordReport()">📄 Generate &amp; Download Word Report</button>
   <div id="exportStatus" style="margin-top:10px"></div>
@@ -485,7 +559,12 @@ const APP = {
   pca: null,
   plsda: null,
   nmds: null,
-  currentStep: 1
+  currentStep: 1,
+  projectMode: 'polar',  // 'polar' | 'nonpolar' | 'both'
+  rawNonpolar: null,      // non-polar raw data when projectMode='both'
+  resultsNonpolar: null,  // non-polar analysis results
+  processedNonpolar: null,// non-polar processed data
+  dataTypeNonpolar: null  // always 'nonpolar' when set
 };
 
 const COLORS = ['#2563a8','#dc2626','#16a34a','#d97706','#7c3aed','#db2777','#0891b2','#65a30d','#ea580c','#0f766e'];
@@ -518,6 +597,16 @@ uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.cl
 uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag'));
 uploadZone.addEventListener('drop', e => { e.preventDefault(); uploadZone.classList.remove('drag'); if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
 fileInput.addEventListener('change', () => { if (fileInput.files[0]) handleFile(fileInput.files[0]); });
+
+const uploadZoneNP = document.getElementById('uploadZoneNP');
+const fileInputNP = document.getElementById('fileInputNP');
+if(uploadZoneNP && fileInputNP){
+  uploadZoneNP.addEventListener('click', () => fileInputNP.click());
+  uploadZoneNP.addEventListener('dragover', e => { e.preventDefault(); uploadZoneNP.classList.add('drag'); });
+  uploadZoneNP.addEventListener('dragleave', () => uploadZoneNP.classList.remove('drag'));
+  uploadZoneNP.addEventListener('drop', e => { e.preventDefault(); uploadZoneNP.classList.remove('drag'); if (e.dataTransfer.files[0]) handleFileNP(e.dataTransfer.files[0]); });
+  fileInputNP.addEventListener('change', e => { if(e.target.files[0]) handleFileNP(e.target.files[0]); });
+}
 
 function handleFile(file) {
   showLoading('Parsing Excel file…');
@@ -615,6 +704,113 @@ function displayFileInfo(file, data) {
 // =====================================================================
 // SAMPLE CONFIGURATION
 // =====================================================================
+// =====================================================================
+// SAMPLE CONFIG SAVE / LOAD
+// =====================================================================
+function saveSampleConfig() {
+  if (!APP.raw) { alert('Please upload data first (Step 1).'); return; }
+  // Sync current DOM state before saving
+  APP.config.design = document.querySelector('input[name=studyDesign]:checked')?.value || 'twogroup';
+  APP.config.paired = document.querySelector('input[name=pairMode]:checked')?.value === 'paired';
+  APP.config.groupNames = (document.getElementById('groupNames')?.value || 'Control,Case').split(',').map(s=>s.trim()).filter(Boolean);
+
+  const cfg = {
+    version: 1,
+    projectMode: APP.projectMode,
+    design: APP.config.design,
+    paired: APP.config.paired,
+    groupNames: APP.config.groupNames,
+    // Per-sample assignments (keyed by original sample ID for robustness)
+    samples: APP.raw.sampleIds.map((id, i) => ({
+      originalId: id,
+      displayName: APP.config.sampleNames[i] || id,
+      group: APP.config.groups[i] || '',
+      pairId: APP.config.pairIds[i] || ''
+    })),
+    clinicalVars: APP.config.clinicalVars,
+    clinicalData: APP.config.clinicalData,
+    savedAt: new Date().toISOString()
+  };
+
+  const blob = new Blob([JSON.stringify(cfg, null, 2)], {type: 'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  // filename includes first sample IDs as fingerprint
+  const stamp = APP.raw.sampleIds.slice(0,2).join('_').replace(/[^a-zA-Z0-9_-]/g,'') || 'study';
+  a.download = `sample_config_${stamp}.json`;
+  a.click();
+}
+
+function loadSampleConfig(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const cfg = JSON.parse(e.target.result);
+      if (!cfg.version || !Array.isArray(cfg.samples)) {
+        alert('❌ Invalid config file. Please use a file saved by this app.'); return;
+      }
+
+      // Apply project mode
+      if (cfg.projectMode) {
+        APP.projectMode = cfg.projectMode;
+        const radio = document.querySelector(`input[name=projectMode][value="${cfg.projectMode}"]`);
+        if (radio) { radio.checked = true; setProjectMode(cfg.projectMode); }
+      }
+
+      // Apply design settings
+      APP.config.design = cfg.design || 'twogroup';
+      APP.config.paired = !!cfg.paired;
+      APP.config.groupNames = cfg.groupNames || ['Control','Case'];
+
+      // Update radio buttons
+      const designRadio = document.querySelector(`input[name=studyDesign][value="${APP.config.design}"]`);
+      if (designRadio) designRadio.checked = true;
+      const pairRadio = document.querySelector(`input[name=pairMode][value="${APP.config.paired?'paired':'unpaired'}"]`);
+      if (pairRadio) pairRadio.checked = true;
+      const gnInput = document.getElementById('groupNames');
+      if (gnInput) gnInput.value = APP.config.groupNames.join(',');
+
+      // Match saved samples to currently loaded data by originalId
+      const idMap = {};
+      cfg.samples.forEach(s => { idMap[s.originalId] = s; });
+
+      if (APP.raw) {
+        APP.raw.sampleIds.forEach((id, i) => {
+          const s = idMap[id];
+          if (s) {
+            APP.config.sampleNames[i] = s.displayName || id;
+            APP.config.groups[i]      = s.group || '';
+            APP.config.pairIds[i]     = s.pairId || '';
+          }
+        });
+      }
+
+      // Clinical variables
+      if (cfg.clinicalVars) APP.config.clinicalVars = cfg.clinicalVars;
+      if (cfg.clinicalData) APP.config.clinicalData = cfg.clinicalData;
+
+      // Rebuild the UI
+      if (APP.raw) buildSampleConfigTable();
+
+      // Summary
+      const matched = cfg.samples.filter(s => APP.raw && APP.raw.sampleIds.includes(s.originalId)).length;
+      const total   = cfg.samples.length;
+      const saved   = cfg.savedAt ? new Date(cfg.savedAt).toLocaleString() : 'unknown';
+      alert(`✅ Config loaded!
+Matched ${matched}/${total} samples.
+Saved: ${saved}`);
+
+    } catch(err) {
+      alert('❌ Failed to parse config file: ' + err.message);
+    }
+    // Reset file input so same file can be re-loaded if needed
+    event.target.value = '';
+  };
+  reader.readAsText(file);
+}
+
 function updateDesign() {
   APP.config.design = document.querySelector('input[name=studyDesign]:checked').value;
 }
@@ -777,6 +973,54 @@ function runProcessing() {
       console.error(err);
     }
   }, 100);
+}
+
+function runNonpolarProcessing(){
+  if(!APP.rawNonpolar){
+    document.getElementById('npProcessingStatus').textContent='❌ No non-polar data loaded. Please upload the non-polar Excel file in Step 1.'; return;
+  }
+  const cfg=APP.config;
+  const sIdx=cfg.groups.map((g,i)=>g?i:-1).filter(i=>i>=0);
+  if(sIdx.length<2){
+    document.getElementById('npProcessingStatus').textContent='❌ Please configure sample groups in Step 2 first, then re-run polar analysis.'; return;
+  }
+  document.getElementById('npProcessingStatus').textContent='⏳ Processing non-polar data…';
+  setTimeout(()=>{
+    try{
+      const log=[];
+      const raw=APP.rawNonpolar;
+      const nF=raw.compounds.length;
+      const groups=sIdx.map(i=>cfg.groups[i]);
+      const names=sIdx.map(i=>cfg.sampleNames[i]||raw.sampleIds[i]);
+      let mat=sIdx.map(i=>{
+        // guard: if non-polar has fewer samples, pad with null
+        const row=raw.matrix[i];
+        return row ? [...row] : new Array(nF).fill(null);
+      });
+      log.push(`Non-polar — samples: ${sIdx.length}, features: ${nF}`);
+      const mvMethod=document.querySelector('input[name=mvMethod]:checked')?.value||'min5';
+      mat=imputeMissing(mat,mvMethod,log);
+      const toKeep=[];
+      for(let j=0;j<nF;j++){const col=mat.map(r=>r[j]);if(Math.max(...col)>Math.min(...col))toKeep.push(j);}
+      mat=mat.map(r=>toKeep.map(j=>r[j]));
+      const compounds=toKeep.map(j=>raw.compounds[j]);
+      log.push(`Features after constant filter: ${toKeep.length} (removed ${nF-toKeep.length})`);
+      const normMethod=document.querySelector('input[name=normMethod]:checked')?.value||'none';
+      mat=normalizeData(mat,normMethod,log);
+      const transMethod=document.querySelector('input[name=transMethod]:checked')?.value||'log2';
+      mat=transformData(mat,transMethod,log);
+      const scaleMethod=document.querySelector('input[name=scaleMethod]:checked')?.value||'auto';
+      const scaledMat=scaleData(mat,scaleMethod,log);
+      APP.processedNonpolar={mat,scaledMat,groups,names,sIdx,compounds};
+      APP.resultsNonpolar=runStatistics(APP.processedNonpolar,log);
+      const nSig=APP.resultsNonpolar.filter(r=>r.fdr<(APP.processing.pThresh||0.05)).length;
+      log.push(`✅ Non-polar analysis complete. Significant (FDR<${APP.processing.pThresh||0.05}): ${nSig}`);
+      document.getElementById('npProcessingStatus').textContent=log.join('\n');
+    }catch(err){
+      document.getElementById('npProcessingStatus').textContent='❌ Error: '+err.message;
+      console.error(err);
+    }
+  },50);
 }
 
 function imputeMissing(mat, method, log) {
@@ -1104,11 +1348,11 @@ function renderAnalysis() {
 
   // Populate group selectors for volcano + pathway
   const allGroups = [...new Set(APP.config.groups.filter(g=>g&&g!==''))];
-  ['volcGrpA','volcGrpB','pathGrpA','pathGrpB'].forEach((selId,idx)=>{
+  ['volcGrpA','volcGrpB','pathGrpA','pathGrpB','lipidPathGrpA','lipidPathGrpB','intPathGrpA','intPathGrpB'].forEach((selId,idx)=>{
     const sel=document.getElementById(selId);
     if (!sel) return;
     sel.innerHTML=allGroups.map(g=>`<option value="${g}">${g}</option>`).join('');
-    if (idx===1||idx===3) sel.selectedIndex=Math.min(1,allGroups.length-1); // Group B = second group by default
+    if (idx%2===1) sel.selectedIndex=Math.min(1,allGroups.length-1); // Group B = second group by default
   });
 
   renderSigTable();
@@ -1783,6 +2027,8 @@ function showVizTab(id, el) {
   if (id==='plsdaTab') renderPLSDA();
   if (id==='nmdsTab') renderNMDS();
   if (id==='pathwayTab') renderPathwayMap();
+  if (id==='lipidPathwayTab') renderLipidPathway();
+  if (id==='integratedPathwayTab') renderIntegratedPathway();
 }
 
 // =====================================================================
@@ -1842,7 +2088,7 @@ function downloadCSV(rows, filename) {
 function exportWordReport() {
   showLoading('Generating Word report…','Capturing plot images…');
   const rpt={};
-  const checks=['rptOverview','rptStats','rptPCA','rptNMDS','rptVIP','rptHeatmap','rptBox','rptBar','rptPathway'];
+  const checks=['rptOverview','rptStats','rptPCA','rptNMDS','rptVIP','rptHeatmap','rptBox','rptBar'];
   checks.forEach(id=>rpt[id]=document.getElementById(id)?.checked||false);
 
   const plotIds=[];
@@ -1853,14 +2099,18 @@ function exportWordReport() {
   if (rpt.rptBox) plotIds.push({id:'boxViolinPlot',title:'Figure: Box/Violin Plot'});
   if (rpt.rptBar) plotIds.push({id:'barPlot',title:'Figure: Bar Plot'});
 
-  // Capture SVG pathway map if requested
-  const pathwaySvgPromise = (rpt.rptPathway && APP.dataType==='polar') ?
-    svgToDataURL('pathwaySVG').then(dataURL=>({title:'Figure: Metabolic Pathway Map',dataURL})).catch(()=>null) :
-    Promise.resolve(null);
+  // Capture SVG pathway maps if requested
+  const checks2=['rptPathway','rptLipidPathway','rptIntPathway'];
+  checks2.forEach(id=>rpt[id]=document.getElementById(id)?.checked||false);
+  const svgCaptures = [
+    rpt.rptPathway     ? svgToDataURL('pathwaySVG').then(d=>({title:'Figure: Polar Metabolic Pathway Map',dataURL:d})).catch(()=>null) : Promise.resolve(null),
+    rpt.rptLipidPathway? svgToDataURL('lipidPathwaySVG').then(d=>({title:'Figure: Lipid Pathway Map',dataURL:d})).catch(()=>null) : Promise.resolve(null),
+    rpt.rptIntPathway  ? svgToDataURL('intPathwaySVG').then(d=>({title:'Figure: Integrated Pathway Map',dataURL:d})).catch(()=>null) : Promise.resolve(null),
+  ];
 
   captureAll(plotIds).then(images => {
-    return pathwaySvgPromise.then(pwImg => {
-      if (pwImg && pwImg.dataURL) images.push(pwImg);
+    return Promise.all(svgCaptures).then(svgImgs => {
+      svgImgs.forEach(img => { if (img && img.dataURL) images.push(img); });
       return images;
     });
   }).then(images => {
@@ -1914,280 +2164,321 @@ function captureAll(plotIds) {
 // =====================================================================
 // PATHWAY MAP
 // =====================================================================
-// PATHWAY_DEFS: [label, x, y, w, h, fill, textColor, strokeColor]  (rectangle top-left)
-const PATHWAY_DEFS=[
-  ['Glycolysis',       220,270,180,350,'#dbeafe','#1e3a5f','#3b82f6'],
-  ['TCA Cycle',        510,360,270,280,'#dcfce7','#14532d','#22c55e'],
-  ['PPP',              340,120,190,200,'#fef3c7','#78350f','#f59e0b'],
-  ['Purine Met.',      590, 70,270,185,'#ede9fe','#3730a3','#8b5cf6'],
-  ['Pyrimidine Met.',  100,110,210,165,'#fce7f3','#9d174d','#ec4899'],
-  ['Urea Cycle',       810,500,165,165,'#fff7ed','#9a3412','#f97316'],
-  ['Choline Met.',      55,335,155,110,'#f0f9ff','#0c4a6e','#0ea5e9'],
-];
+const PATHWAY_DATA = {"polar":{"name":"Polar Metabolites","bw":2352.6666666666647,"bh":1291.1666666666654,"nodes":[{"t":"Orotate","x":1763.8,"y":209.2,"w":74.5,"h":30.6,"cas":"65-86-1"},{"t":"Urea","x":1101.2,"y":959.8,"w":83.5,"h":26.5,"cas":"57-13-6"},{"t":"Ribose","x":931.5,"y":349.9,"w":63.0,"h":34.9,"cas":"50-69-1"},{"t":"dUTP","x":1766.3,"y":172.8,"w":77.0,"h":26.8,"cas":"1173-82-6"},{"t":"3-AIBA","x":858.8,"y":175.1,"w":98.7,"h":32.4,"cas":"144-90-1"},{"t":"CDP-choline (1+)","x":1332.9,"y":155.5,"w":106.9,"h":26.7,"cas":"987-87-0"},{"t":"dTTP","x":1670.0,"y":209.8,"w":75.8,"h":26.8,"cas":"365-08-2"},{"t":"Arginiocuccinic \nacid","x":815.5,"y":905.0,"w":101.0,"h":28.0,"cas":"2387-71-5"},{"t":"H-Ser","x":1662.4,"y":1115.2,"w":65.6,"h":32.4,"cas":"56-45-1"},{"t":"dCTP","x":1673.5,"y":170.9,"w":74.0,"h":25.5,"cas":"2056-98-6"},{"t":"Deoxyribose","x":853.7,"y":350.8,"w":65.6,"h":35.7,"cas":"533-67-5"},{"t":"Retinol Acetate","x":2191.1,"y":886.2,"w":110.2,"h":36.2,"cas":"127-47-9"},{"t":"Glucose","x":526.0,"y":335.0,"w":90.0,"h":25.0,"cas":"492-62-6"},{"t":"P-Ser","x":1570.5,"y":1116.5,"w":60.4,"h":34.9,"cas":"407-41-0"},{"t":"Metabolite","x":1696.4,"y":247.4,"w":90.0,"h":25.0,"cas":""},{"t":"Xanthosine","x":1711.7,"y":310.3,"w":84.2,"h":27.3,"cas":"146-80-5"},{"t":"G6P","x":526.0,"y":376.0,"w":90.0,"h":24.0,"cas":"56-73-5"},{"t":"F6P","x":526.0,"y":422.5,"w":90.0,"h":25.0,"cas":"643-13-0"},{"t":"FBP","x":526.0,"y":474.5,"w":90.0,"h":25.0,"cas":"34693-15-7"},{"t":"DHAP","x":458.3,"y":529.5,"w":90.0,"h":25.0,"cas":"57-04-5"},{"t":"GAP","x":582.0,"y":527.5,"w":90.0,"h":25.0,"cas":"591-57-1"},{"t":"1,3-BPG","x":583.0,"y":568.5,"w":90.0,"h":25.0,"cas":"1981-49-3"},{"t":"3PG","x":582.0,"y":612.5,"w":90.0,"h":25.0,"cas":"3443-57-0"},{"t":"Succinate","x":303.3,"y":1077.8,"w":90.0,"h":25.0,"cas":"110-15-6"},{"t":"PEP","x":582.0,"y":692.5,"w":90.0,"h":25.0,"cas":"138-08-9"},{"t":"Succinyl-CoA","x":406.3,"y":1130.8,"w":90.0,"h":25.0,"cas":"604-98-8"},{"t":"Citric","x":510.3,"y":878.8,"w":90.0,"h":25.0,"cas":"372-75-8"},{"t":"OAA","x":315.3,"y":878.8,"w":90.0,"h":25.0,"cas":"328-42-7"},{"t":"Acetyl-CoA","x":582.0,"y":788.7,"w":90.0,"h":28.0,"cas":"72-89-9"},{"t":"Pyruvate","x":582.0,"y":735.8,"w":90.0,"h":25.0,"cas":"127-17-3"},{"t":"cis-Aconitate","x":557.3,"y":940.8,"w":90.0,"h":25.0,"cas":"499-12-7"},{"t":"alpha-KG","x":513.3,"y":1076.8,"w":90.0,"h":25.0,"cas":"328-50-7"},{"t":"Fumarate","x":256.3,"y":1002.8,"w":90.0,"h":25.0,"cas":"110-17-8"},{"t":"Lactate","x":458.3,"y":735.8,"w":90.0,"h":25.0,"cas":"50-21-5"},{"t":"2-HG","x":661.3,"y":1038.8,"w":90.0,"h":25.0,"cas":"13095-48-2"},{"t":"Glutamine","x":771.3,"y":1076.8,"w":90.0,"h":25.0,"cas":"56-85-9"},{"t":"Glutamate","x":661.3,"y":1076.8,"w":90.0,"h":25.0,"cas":"56-86-0"},{"t":"Itaconate","x":664.3,"y":940.8,"w":90.0,"h":25.0,"cas":"97-65-4"},{"t":"Malate","x":271.3,"y":940.8,"w":90.0,"h":25.0,"cas":"97-67-6"},{"t":"6PG","x":728.0,"y":355.3,"w":90.0,"h":25.0,"cas":"921-62-0"},{"t":"Ru5P","x":851.7,"y":404.7,"w":90.0,"h":25.0,"cas":"551-85-9"},{"t":"FMN","x":913.3,"y":555.3,"w":90.0,"h":25.0,"cas":"146-17-8"},{"t":"R5P","x":851.3,"y":485.3,"w":90.0,"h":25.0,"cas":"4300-28-1"},{"t":"E4P","x":717.3,"y":493.3,"w":90.0,"h":25.0,"cas":"585-18-2"},{"t":"Xu5P","x":730.7,"y":398.3,"w":90.0,"h":25.0,"cas":"492-62-6"},{"t":"S7P","x":791.3,"y":554.3,"w":90.0,"h":25.0,"cas":"2646-35-7"},{"t":"Isocitric","x":546.3,"y":1002.8,"w":90.0,"h":25.0,"cas":"372-75-8"},{"t":"Glycerate","x":458.3,"y":642.7,"w":90.0,"h":25.0,"cas":"473-81-4"},{"t":"2PG","x":582.0,"y":650.5,"w":90.0,"h":25.0,"cas":"3443-57-0"},{"t":"Pro","x":886.7,"y":1148.7,"w":90.0,"h":25.0,"cas":"147-85-3"},{"t":"Hydroxyproline","x":887.3,"y":1201.3,"w":90.0,"h":25.0,"cas":"51-35-4"},{"t":"His","x":779.3,"y":1150.7,"w":90.0,"h":25.0,"cas":"71-00-1"},{"t":"GSH","x":676.0,"y":1150.0,"w":90.0,"h":25.0,"cas":"70-18-8"},{"t":"GSSG","x":676.0,"y":1193.3,"w":90.0,"h":25.0,"cas":"27025-41-8"},{"t":"Citrulline","x":765.3,"y":985.5,"w":90.0,"h":25.0,"cas":"372-75-8"},{"t":"Arg","x":949.3,"y":960.2,"w":90.0,"h":25.0,"cas":"74-79-3"},{"t":"Ornithine","x":875.3,"y":1038.2,"w":90.0,"h":25.0,"cas":"70-26-8"},{"t":"Creatine","x":949.3,"y":1090.2,"w":90.0,"h":25.0,"cas":"57-00-1"},{"t":"GSNO","x":676.0,"y":1231.3,"w":90.0,"h":25.0,"cas":"57564-91-7"},{"t":"Asp","x":797.3,"y":829.5,"w":90.0,"h":25.0,"cas":"56-84-8"},{"t":"b-Ala","x":1017.7,"y":830.5,"w":90.0,"h":25.0,"cas":"107-95-9"},{"t":"Ala","x":1018.3,"y":674.5,"w":90.0,"h":25.0,"cas":"56-41-7"},{"t":"PRPP","x":1045.3,"y":355.3,"w":90.0,"h":25.0,"cas":""},{"t":"AICAR","x":1587.3,"y":300.0,"w":90.0,"h":25.0,"cas":""},{"t":"IMP","x":1514.7,"y":344.7,"w":90.0,"h":25.0,"cas":"131-99-7"},{"t":"IDP","x":1713.3,"y":346.0,"w":90.0,"h":25.0,"cas":"86-04-4"},{"t":"ITP","x":1823.3,"y":345.3,"w":90.0,"h":25.0,"cas":"132-06-9"},{"t":"GMP","x":1673.3,"y":412.7,"w":90.0,"h":25.0,"cas":"85-32-5"},{"t":"GTP","x":1779.3,"y":413.3,"w":90.0,"h":25.0,"cas":"86-01-1"},{"t":"GDP","x":1780.0,"y":450.0,"w":90.0,"h":25.0,"cas":"146-91-8"},{"t":"dGDP","x":1782.0,"y":486.7,"w":90.0,"h":25.0,"cas":"3493-09-2"},{"t":"dGMP","x":1677.3,"y":486.0,"w":90.0,"h":25.0,"cas":"902-04-5"},{"t":"dGTP","x":1783.3,"y":524.0,"w":90.0,"h":25.0,"cas":"2564-35-4"},{"t":"dG","x":1576.7,"y":486.7,"w":90.0,"h":25.0,"cas":"961-07-9"},{"t":"Guanine","x":1576.7,"y":450.7,"w":90.0,"h":25.0,"cas":"73-40-5"},{"t":"Guanosine","x":1574.7,"y":412.3,"w":90.0,"h":25.0,"cas":"118-00-3"},{"t":"Xanthine","x":1546.7,"y":562.0,"w":90.0,"h":25.0,"cas":"69-89-6"},{"t":"Urate","x":1669.7,"y":595.3,"w":90.0,"h":25.0,"cas":"69-93-2"},{"t":"Hypoxanthine","x":1347.7,"y":556.0,"w":90.0,"h":25.0,"cas":"68-94-0"},{"t":"Adenine","x":1349.7,"y":475.3,"w":90.0,"h":25.0,"cas":"73-24-5"},{"t":"dA","x":1347.7,"y":517.7,"w":90.0,"h":25.0,"cas":"958-09-8"},{"t":"Adenosine","x":1350.3,"y":434.3,"w":90.0,"h":25.0,"cas":"58-61-7"},{"t":"Inosine","x":1479.3,"y":436.3,"w":90.0,"h":25.0,"cas":"58-63-9"},{"t":"AMP","x":1247.0,"y":434.3,"w":90.0,"h":25.0,"cas":"61-19-8"},{"t":"ATP","x":1149.0,"y":433.0,"w":90.0,"h":25.0,"cas":"56-65-5"},{"t":"ADP","x":1149.0,"y":479.7,"w":90.0,"h":25.0,"cas":"58-64-0"},{"t":"dAMP","x":1226.0,"y":517.7,"w":90.0,"h":25.0,"cas":"653-63-4"},{"t":"Kynurenine","x":1364.0,"y":674.2,"w":90.0,"h":25.0,"cas":"2922-83-0"},{"t":"Kynurenate","x":1364.0,"y":713.5,"w":90.0,"h":25.0,"cas":"492-27-3"},{"t":"Trp","x":1534.7,"y":675.2,"w":90.0,"h":25.0,"cas":"73-22-3"},{"t":"UMP","x":1493.3,"y":246.2,"w":90.0,"h":25.0,"cas":"58-97-9"},{"t":"Uracil","x":1602.3,"y":246.2,"w":90.0,"h":25.0,"cas":"66-22-8"},{"t":"Uridine","x":1696.2,"y":247.3,"w":90.0,"h":27.8,"cas":"58-96-8"},{"t":"UDP","x":1448.3,"y":192.5,"w":90.0,"h":25.0,"cas":"58-98-0"},{"t":"UTP","x":1380.3,"y":246.2,"w":90.0,"h":25.0,"cas":"63-39-8"},{"t":"CTP","x":1202.2,"y":154.4,"w":83.7,"h":25.0,"cas":"65-47-4"},{"t":"CDP","x":1460.2,"y":154.4,"w":87.0,"h":26.0,"cas":"63-38-7"},{"t":"CMP","x":1563.2,"y":154.4,"w":75.0,"h":23.8,"cas":"63-37-6"},{"t":"Thymidine","x":1678.7,"y":76.2,"w":90.0,"h":25.0,"cas":"50-89-5"},{"t":"Thymine","x":1544.7,"y":76.2,"w":90.0,"h":25.0,"cas":"65-71-4"},{"t":"dCDP","x":1967.7,"y":114.2,"w":90.0,"h":25.0,"cas":"800-73-7"},{"t":"dCMP","x":1967.7,"y":188.8,"w":90.0,"h":25.0,"cas":"1032-65-1"},{"t":"Cytosine","x":1890.7,"y":230.2,"w":90.0,"h":25.0,"cas":"71-30-7"},{"t":"Val","x":598.0,"y":167.3,"w":90.0,"h":25.0,"cas":"72-18-4"},{"t":"Ile","x":598.0,"y":200.0,"w":90.0,"h":25.0,"cas":"73-32-5"},{"t":"Leu","x":598.0,"y":234.0,"w":90.0,"h":25.0,"cas":"61-90-5"},{"t":"Tyr","x":1528.7,"y":763.5,"w":90.0,"h":25.0,"cas":"60-18-4"},{"t":"Phe","x":1644.0,"y":763.5,"w":90.0,"h":25.0,"cas":"63-91-2"},{"t":"Cys","x":1847.3,"y":982.7,"w":90.0,"h":25.0,"cas":"52-90-4"},{"t":"Cystine","x":1733.3,"y":963.3,"w":90.0,"h":25.0,"cas":"56-89-3"},{"t":"Cysthi","x":1820.0,"y":1040.7,"w":90.0,"h":25.0,"cas":"56-88-2"},{"t":"Taurine","x":1928.0,"y":1038.0,"w":90.0,"h":25.0,"cas":"107-35-7"},{"t":"Ser","x":1767.0,"y":1113.0,"w":90.0,"h":25.0,"cas":"56-45-1"},{"t":"Gly","x":1767.0,"y":1207.0,"w":90.0,"h":25.0,"cas":"56-40-6"},{"t":"Thr","x":1883.3,"y":1153.3,"w":90.0,"h":25.0,"cas":"72-19-5"},{"t":"Sarcosine","x":1664.3,"y":1207.0,"w":90.0,"h":25.0,"cas":"107-97-1"},{"t":"DMG","x":1558.7,"y":1207.0,"w":90.0,"h":25.0,"cas":"1118-68-9"},{"t":"Betaine","x":1451.3,"y":1207.0,"w":90.0,"h":25.0,"cas":"107-43-7"},{"t":"Homocysteine","x":1658.0,"y":1042.7,"w":90.0,"h":25.0,"cas":"6027-13-0"},{"t":"Met","x":1616.0,"y":998.7,"w":90.0,"h":25.0,"cas":"63-68-3"},{"t":"SAM","x":1503.3,"y":998.7,"w":90.0,"h":25.0,"cas":"29908-03-0"},{"t":"SAH","x":1540.0,"y":1042.0,"w":90.0,"h":25.0,"cas":"979-92-0"},{"t":"cGMP","x":1737.3,"y":378.3,"w":90.0,"h":25.0,"cas":"7665-99-8"},{"t":"2-oxoisovalerate","x":731.8,"y":172.0,"w":107.0,"h":25.0,"cas":"759-05-7"},{"t":"2-oxovalerate","x":731.8,"y":202.0,"w":107.0,"h":25.0,"cas":"1821-02-9"},{"t":"3-Aminoisobutyric acid","x":731.8,"y":236.0,"w":151.7,"h":25.0,"cas":"144-90-1"},{"t":"GABA","x":349.3,"y":1187.8,"w":90.0,"h":25.0,"cas":"56-12-2"},{"t":"5-oxoproline","x":478.0,"y":1189.8,"w":90.0,"h":25.0,"cas":"98-79-3"},{"t":"7,8-Dihydrobiopterin","x":1935.5,"y":414.0,"w":145.0,"h":25.0,"cas":"6779-87-9"},{"t":"Adenylosuccinic acid","x":1247.0,"y":344.7,"w":149.7,"h":25.0,"cas":"19046-78-7"},{"t":"Asparagine","x":797.3,"y":790.8,"w":90.0,"h":23.7,"cas":"2058-58-4"},{"t":"Biotin","x":1733.3,"y":932.7,"w":90.0,"h":25.0,"cas":"58-85-5"},{"t":"cAMP","x":1149.0,"y":393.9,"w":90.0,"h":25.5,"cas":"60-92-4"},{"t":"CoA","x":458.0,"y":789.3,"w":90.0,"h":25.0,"cas":"85-61-0"},{"t":"Cytidine","x":1890.7,"y":277.5,"w":90.0,"h":25.0,"cas":"65-46-3"},{"t":"dC","x":1272.3,"y":246.8,"w":90.0,"h":25.0,"cas":"951-77-9"},{"t":"2-deoxyinosine","x":1418.5,"y":389.0,"w":98.3,"h":25.0,"cas":"890-38-0"},{"t":"dU","x":1272.3,"y":210.2,"w":90.0,"h":25.0,"cas":"951-78-0"},{"t":"G1P","x":334.0,"y":165.0,"w":90.0,"h":24.0,"cas":"59-56-3"},{"t":"Glycerate","x":1893.0,"y":1113.0,"w":90.0,"h":25.0,"cas":"473-81-4"},{"t":"Inositol","x":131.3,"y":165.0,"w":90.0,"h":25.0,"cas":"6917-35-7"},{"t":"L-1-Pyrroline-3-hydroxy-5-carboxylate","x":897.8,"y":1233.3,"w":244.3,"h":25.0,"cas":"C04281"},{"t":"L-2-Aminoadipate","x":367.5,"y":1232.7,"w":118.3,"h":25.0,"cas":"542-32-5"},{"t":"Lysine","x":1341.3,"y":1090.2,"w":90.0,"h":25.0,"cas":"56-87-1"},{"t":"Homoserine","x":1341.3,"y":1128.2,"w":90.0,"h":25.0,"cas":"672-15-1"},{"t":"Allothreonine","x":1341.3,"y":1166.2,"w":90.0,"h":30.3,"cas":"28954-12-3"},{"t":"Malonyl-CoA","x":698.7,"y":788.7,"w":90.0,"h":28.0,"cas":"524-14-1"},{"t":"N-Acetyl-Asp","x":910.0,"y":770.2,"w":90.0,"h":25.0,"cas":"997-55-7"},{"t":"NAD+","x":307.3,"y":320.0,"w":90.0,"h":25.0,"cas":"53-84-9"},{"t":"NADH","x":307.3,"y":352.7,"w":90.0,"h":25.0,"cas":"58-68-4"},{"t":"NADP+","x":308.7,"y":253.3,"w":90.0,"h":25.0,"cas":"53-59-8"},{"t":"NADPH","x":308.7,"y":288.7,"w":90.0,"h":25.0,"cas":"53-57-6"},{"t":"N-Carbamoyl-L-Asp","x":913.5,"y":802.8,"w":122.3,"h":25.0,"cas":"13184-27-5"},{"t":"O-Acetyl-L-Ser","x":1733.3,"y":996.0,"w":90.0,"h":25.0,"cas":"5147-00-2"},{"t":"O-Phosphoethanolamine","x":1209.5,"y":1248.7,"w":175.7,"h":25.0,"cas":"1071-23-4"},{"t":"Phenylacetylglycine","x":1939.8,"y":1242.7,"w":136.3,"h":25.0,"cas":"500-98-1"},{"t":"TMP","x":1969.3,"y":76.8,"w":90.0,"h":25.0,"cas":"291-03-2"},{"t":"5-Formyl THF","x":2189.2,"y":637.3,"w":116.3,"h":25.0,"cas":"58-05-9"},{"t":"5-Methyl THF","x":2189.2,"y":673.4,"w":116.3,"h":29.2,"cas":"134-35-0"},{"t":"Dihydrofolate","x":2189.2,"y":711.4,"w":116.3,"h":29.2,"cas":"4033-27-6"},{"t":"Tryptamine","x":1676.7,"y":675.2,"w":90.0,"h":25.0,"cas":"61-54-1"}],"ixns":[{"c":"#000000","p":[{"x":1496.3,"y":1207.0,"a":""},{"x":1513.7,"y":1207.0,"a":""}]},{"c":"#000000","p":[{"x":791.3,"y":541.8,"a":""},{"x":717.3,"y":505.8,"a":""}]},{"c":"#000000","p":[{"x":1873.7,"y":190.3,"a":""},{"x":1748.0,"y":190.7,"a":""}]},{"c":"#000000","p":[{"x":1016.0,"y":729.3,"a":""},{"x":627.0,"y":729.6,"a":""}]},{"c":"#000000","p":[{"x":1548.3,"y":998.7,"a":""},{"x":1571.0,"y":998.7,"a":""}]},{"c":"#000000","p":[{"x":526.0,"y":388.0,"a":""},{"x":526.0,"y":410.0,"a":""}]},{"c":"#000000","p":[{"x":1673.3,"y":425.2,"a":""},{"x":1735.0,"y":450.0,"a":""}]},{"c":"#000000","p":[{"x":1409.3,"y":1072.0,"a":""},{"x":1408.0,"y":740.0,"a":""}]},{"c":"#000000","p":[{"x":681.3,"y":741.3,"a":""},{"x":627.0,"y":742.1,"a":"Arrow"}]},{"c":"#000000","p":[{"x":1149.0,"y":406.7,"a":""},{"x":1149.0,"y":420.5,"a":""}]},{"c":"#000000","p":[{"x":579.7,"y":803.3,"a":""},{"x":407.4,"y":852.5,"a":""}]},{"c":"#000000","p":[{"x":1872.0,"y":77.3,"a":""},{"x":1872.7,"y":190.3,"a":""}]},{"c":"#000000","p":[{"x":1767.0,"y":1125.5,"a":""},{"x":1767.0,"y":1194.5,"a":""}]},{"c":"#000000","p":[{"x":525.3,"y":345.7,"a":""},{"x":526.0,"y":364.0,"a":""}]},{"c":"#000000","p":[{"x":797.3,"y":842.0,"a":""},{"x":797.3,"y":862.7,"a":""}]},{"c":"#000000","p":[{"x":627.0,"y":788.7,"a":""},{"x":653.7,"y":788.7,"a":""}]},{"c":"#000000","p":[{"x":996.0,"y":959.0,"a":""},{"x":1059.5,"y":959.8,"a":""}]},{"c":"#000000","p":[{"x":661.7,"y":1090.3,"a":""},{"x":886.7,"y":1136.2,"a":""}]},{"c":"#000000","p":[{"x":772.7,"y":1064.3,"a":""},{"x":801.7,"y":1021.3,"a":""}]},{"c":"#000000","p":[{"x":1346.7,"y":530.3,"a":""},{"x":1347.7,"y":543.5,"a":""}]},{"c":"#000000","p":[{"x":1718.3,"y":412.7,"a":""},{"x":1734.3,"y":413.3,"a":""}]},{"c":"#000000","p":[{"x":851.3,"y":497.8,"a":""},{"x":913.3,"y":542.8,"a":""}]},{"c":"#000000","p":[{"x":1469.7,"y":344.7,"a":""},{"x":1321.8,"y":344.7,"a":""}]},{"c":"#000000","p":[{"x":1532.7,"y":450.3,"a":""},{"x":1521.7,"y":463.3,"a":""}]},{"c":"#000000","p":[{"x":1766.7,"y":1076.0,"a":""},{"x":1409.3,"y":1072.0,"a":""}]},{"c":"#000000","p":[{"x":1479.3,"y":423.8,"a":""},{"x":1514.7,"y":357.2,"a":""}]},{"c":"#000000","p":[{"x":672.3,"y":493.3,"a":""},{"x":571.0,"y":422.5,"a":""}]},{"c":"#000000","p":[{"x":1386.4,"y":155.5,"a":""},{"x":1416.7,"y":154.4,"a":""}]},{"c":"#000000","p":[{"x":851.7,"y":417.2,"a":""},{"x":851.3,"y":472.8,"a":""}]},{"c":"#000000","p":[{"x":1757.7,"y":345.3,"a":""},{"x":1778.3,"y":345.3,"a":""}]},{"c":"#000000","p":[{"x":662.7,"y":1087.3,"a":""},{"x":779.3,"y":1138.2,"a":""}]},{"c":"#000000","p":[{"x":1721.7,"y":485.3,"a":""},{"x":1737.0,"y":486.7,"a":""}]},{"c":"#000000","p":[{"x":1783.7,"y":498.3,"a":""},{"x":1783.3,"y":511.5,"a":""}]},{"c":"#000000","p":[{"x":1562.7,"y":344.3,"a":""},{"x":1668.3,"y":346.0,"a":""}]},{"c":"#000000","p":[{"x":1500.7,"y":76.3,"a":""},{"x":938.0,"y":74.0,"a":""}]},{"c":"#000000","p":[{"x":1347.7,"y":488.3,"a":""},{"x":1347.7,"y":505.2,"a":""}]},{"c":"#000000","p":[{"x":1571.0,"y":762.0,"a":""},{"x":1599.0,"y":763.5,"a":""}]},{"c":"#000000","p":[{"x":581.7,"y":753.3,"a":""},{"x":582.0,"y":774.7,"a":""}]},{"c":"#000000","p":[{"x":1730.7,"y":389.3,"a":""},{"x":1779.3,"y":400.8,"a":""}]},{"c":"#000000","p":[{"x":1514.7,"y":358.3,"a":""},{"x":1673.3,"y":400.2,"a":""}]},{"c":"#000000","p":[{"x":1616.7,"y":117.3,"a":""},{"x":1100.7,"y":119.3,"a":""}]},{"c":"#000000","p":[{"x":1408.0,"y":741.3,"a":""},{"x":680.0,"y":741.3,"a":""}]},{"c":"#000000","p":[{"x":1247.0,"y":357.2,"a":""},{"x":1247.0,"y":421.8,"a":""}]},{"c":"#000000","p":[{"x":582.0,"y":625.0,"a":""},{"x":582.0,"y":638.0,"a":""}]},{"c":"#000000","p":[{"x":1503.3,"y":1011.2,"a":""},{"x":1517.5,"y":1029.5,"a":""}]},{"c":"#000000","p":[{"x":1677.7,"y":498.3,"a":""},{"x":1738.3,"y":524.0,"a":""}]},{"c":"#000000","p":[{"x":676.0,"y":1205.8,"a":""},{"x":676.0,"y":1218.8,"a":""}]},{"c":"#000000","p":[{"x":1585.7,"y":310.3,"a":""},{"x":1514.7,"y":332.2,"a":""}]},{"c":"#000000","p":[{"x":1503.7,"y":154.4,"a":""},{"x":1525.7,"y":154.4,"a":""}]},{"c":"#000000","p":[{"x":948.7,"y":972.3,"a":""},{"x":949.3,"y":1077.7,"a":""}]},{"c":"#000000","p":[{"x":1392.0,"y":865.3,"a":""},{"x":1394.7,"y":1146.7,"a":""}]},{"c":"#000000","p":[{"x":583.0,"y":581.0,"a":""},{"x":582.0,"y":600.0,"a":""}]},{"c":"#000000","p":[{"x":571.0,"y":376.0,"a":""},{"x":683.0,"y":355.3,"a":""}]},{"c":"#000000","p":[{"x":616.3,"y":1076.8,"a":""},{"x":558.3,"y":1076.8,"a":""}]},{"c":"#000000","p":[{"x":1406.3,"y":1207.0,"a":""},{"x":1337.0,"y":1207.0,"a":"Arrow"}]},{"c":"#000000","p":[{"x":1767.0,"y":1100.5,"a":""},{"x":1820.0,"y":1053.2,"a":""}]},{"c":"#000000","p":[{"x":526.0,"y":487.0,"a":""},{"x":458.3,"y":517.0,"a":""}]},{"c":"#000000","p":[{"x":1574.7,"y":424.8,"a":""},{"x":1576.7,"y":438.2,"a":""}]},{"c":"#000000","p":[{"x":1779.7,"y":424.3,"a":""},{"x":1780.0,"y":437.5,"a":""}]},{"c":"#000000","p":[{"x":1632.7,"y":1012.3,"a":""},{"x":1635.5,"y":1030.2,"a":""}]},{"c":"#000000","p":[{"x":1599.7,"y":156.3,"a":""},{"x":1889.7,"y":156.3,"a":""}]},{"c":"#000000","p":[{"x":1812.0,"y":1200.7,"a":""},{"x":1838.3,"y":1159.6,"a":""}]},{"c":"#000000","p":[{"x":1767.0,"y":1100.5,"a":""},{"x":1766.7,"y":1076.0,"a":""}]},{"c":"#000000","p":[{"x":896.3,"y":485.3,"a":""},{"x":1000.3,"y":355.3,"a":""}]},{"c":"#000000","p":[{"x":579.7,"y":663.3,"a":""},{"x":579.7,"y":679.3,"a":""}]},{"c":"#000000","p":[{"x":1780.0,"y":462.5,"a":""},{"x":1782.0,"y":474.2,"a":""}]},{"c":"#000000","p":[{"x":1928.0,"y":1050.5,"a":""},{"x":1971.7,"y":1100.7,"a":"Arrow"}]},{"c":"#000000","p":[{"x":936.7,"y":76.3,"a":""},{"x":936.0,"y":110.7,"a":"Arrow"}]},{"c":"#000000","p":[{"x":1538.7,"y":244.3,"a":""},{"x":1557.3,"y":246.2,"a":""}]},{"c":"#000000","p":[{"x":1408.7,"y":674.7,"a":""},{"x":1489.7,"y":675.2,"a":""}]},{"c":"#000000","p":[{"x":1194.0,"y":479.7,"a":""},{"x":1247.0,"y":446.8,"a":""}]},{"c":"#000000","p":[{"x":773.0,"y":349.1,"a":""},{"x":851.7,"y":392.2,"a":""}]},{"c":"#000000","p":[{"x":1348.7,"y":444.3,"a":""},{"x":1349.7,"y":462.8,"a":""}]},{"c":"#000000","p":[{"x":1434.3,"y":436.3,"a":""},{"x":1395.3,"y":434.3,"a":""}]},{"c":"#000000","p":[{"x":851.3,"y":497.8,"a":""},{"x":791.3,"y":541.8,"a":""}]},{"c":"#000000","p":[{"x":526.0,"y":487.0,"a":""},{"x":582.0,"y":515.0,"a":""}]},{"c":"#000000","p":[{"x":1099.7,"y":117.3,"a":""},{"x":1098.7,"y":829.3,"a":""}]},{"c":"#000000","p":[{"x":1439.7,"y":204.3,"a":""},{"x":1493.3,"y":233.7,"a":""}]},{"c":"#000000","p":[{"x":1874.7,"y":993.3,"a":""},{"x":1905.5,"y":1025.5,"a":""}]},{"c":"#000000","p":[{"x":1494.7,"y":192.3,"a":""},{"x":1750.3,"y":190.8,"a":""}]},{"c":"#000000","p":[{"x":752.3,"y":829.5,"a":""},{"x":317.3,"y":836.3,"a":""}]},{"c":"#000000","p":[{"x":1305.3,"y":434.3,"a":""},{"x":1292.0,"y":434.3,"a":""}]},{"c":"#000000","p":[{"x":685.7,"y":398.3,"a":""},{"x":571.0,"y":422.5,"a":""}]},{"c":"#000000","p":[{"x":615.7,"y":1039.3,"a":""},{"x":535.8,"y":1064.3,"a":""}]},{"c":"#000000","p":[{"x":1579.7,"y":675.2,"a":""},{"x":1631.7,"y":675.2,"a":""}]},{"c":"#000000","p":[{"x":1479.3,"y":423.8,"a":""},{"x":1418.5,"y":401.5,"a":""}]},{"c":"#000000","p":[{"x":661.7,"y":1088.3,"a":""},{"x":676.0,"y":1137.5,"a":""}]},{"c":"#000000","p":[{"x":1364.0,"y":686.7,"a":""},{"x":1364.0,"y":701.0,"a":""}]},{"c":"#000000","p":[{"x":886.7,"y":1161.2,"a":""},{"x":887.3,"y":1188.8,"a":""}]},{"c":"#000000","p":[{"x":1456.8,"y":448.8,"a":""},{"x":1392.7,"y":549.7,"a":""}]},{"c":"#000000","p":[{"x":1098.7,"y":829.3,"a":""},{"x":1062.7,"y":830.5,"a":""}]},{"c":"#000000","p":[{"x":1271.0,"y":517.7,"a":""},{"x":1302.7,"y":517.7,"a":""}]},{"c":"#000000","p":[{"x":676.0,"y":1162.5,"a":""},{"x":676.0,"y":1180.8,"a":""}]},{"c":"#000000","p":[{"x":1722.0,"y":1207.0,"a":""},{"x":1709.3,"y":1207.0,"a":""}]},{"c":"#000000","p":[{"x":1891.7,"y":156.3,"a":""},{"x":1890.7,"y":217.7,"a":""}]},{"c":"#000000","p":[{"x":1318.7,"y":673.7,"a":""},{"x":1063.3,"y":674.5,"a":""}]},{"c":"#000000","p":[{"x":1522.7,"y":463.3,"a":""},{"x":1524.2,"y":549.5,"a":""}]},{"c":"#000000","p":[{"x":1017.3,"y":729.3,"a":""},{"x":1018.3,"y":687.0,"a":""}]},{"c":"#000000","p":[{"x":1591.7,"y":572.3,"a":""},{"x":1624.7,"y":589.1,"a":""}]},{"c":"#000000","p":[{"x":1616.7,"y":233.3,"a":""},{"x":1614.7,"y":118.3,"a":""}]},{"c":"#000000","p":[{"x":1396.0,"y":1149.3,"a":""},{"x":1838.3,"y":1153.3,"a":""}]},{"c":"#000000","p":[{"x":1645.7,"y":245.3,"a":""},{"x":1651.2,"y":247.3,"a":""}]},{"c":"#000000","p":[{"x":534.7,"y":613.3,"a":""},{"x":503.3,"y":642.7,"a":""}]},{"c":"#000000","p":[{"x":1812.0,"y":1113.0,"a":""},{"x":1848.0,"y":1113.0,"a":""}]},{"c":"#000000","p":[{"x":1149.0,"y":445.5,"a":""},{"x":1149.0,"y":467.2,"a":""}]},{"c":"#000000","p":[{"x":1440.7,"y":203.3,"a":""},{"x":1380.3,"y":233.7,"a":""}]},{"c":"#000000","p":[{"x":660.0,"y":1090.7,"a":""},{"x":478.0,"y":1177.3,"a":""}]},{"c":"#000000","p":[{"x":1604.7,"y":411.3,"a":""},{"x":1628.3,"y":412.7,"a":""}]},{"c":"#000000","p":[{"x":1603.7,"y":1207.0,"a":""},{"x":1619.3,"y":1207.0,"a":""}]},{"c":"#000000","p":[{"x":1669.7,"y":399.3,"a":""},{"x":1737.3,"y":390.8,"a":""}]},{"c":"#000000","p":[{"x":582.0,"y":540.0,"a":""},{"x":583.0,"y":556.0,"a":""}]},{"c":"#000000","p":[{"x":1224.5,"y":421.8,"a":""},{"x":1194.0,"y":393.9,"a":""}]},{"c":"#000000","p":[{"x":1967.7,"y":128.3,"a":""},{"x":1967.7,"y":176.3,"a":""}]},{"c":"#000000","p":[{"x":1723.7,"y":76.2,"a":""},{"x":1924.3,"y":76.8,"a":""}]},{"c":"#000000","p":[{"x":314.7,"y":837.3,"a":""},{"x":315.3,"y":866.3,"a":""}]},{"c":"#000000","p":[{"x":1590.7,"y":75.3,"a":""},{"x":1633.7,"y":76.2,"a":""}]},{"c":"#000000","p":[{"x":1422.7,"y":246.3,"a":""},{"x":1448.3,"y":246.2,"a":""}]},{"c":"#000000","p":[{"x":798.7,"y":862.7,"a":""},{"x":1390.7,"y":862.7,"a":""}]},{"c":"#000000","p":[{"x":503.3,"y":735.8,"a":""},{"x":537.0,"y":735.8,"a":""}]},{"c":"#000000","p":[{"x":1890.7,"y":242.7,"a":""},{"x":1890.7,"y":265.0,"a":""}]},{"c":"#000000","p":[{"x":1834.7,"y":1026.3,"a":""},{"x":1847.3,"y":995.2,"a":""}]},{"c":"#000000","p":[{"x":1202.7,"y":432.3,"a":""},{"x":1194.0,"y":433.0,"a":""}]},{"c":"#000000","p":[{"x":1244.1,"y":154.4,"a":""},{"x":1292.8,"y":154.3,"a":""}]},{"c":"#000000","p":[{"x":797.3,"y":802.7,"a":""},{"x":797.3,"y":817.0,"a":""}]},{"c":"#000000","p":[{"x":1576.7,"y":462.3,"a":""},{"x":1576.7,"y":474.2,"a":""}]},{"c":"#000000","p":[{"x":725.7,"y":1078.3,"a":""},{"x":706.3,"y":1076.8,"a":""}]},{"c":"#000000","p":[{"x":581.7,"y":705.3,"a":""},{"x":582.0,"y":723.3,"a":""}]},{"c":"#000000","p":[{"x":1583.7,"y":1042.3,"a":""},{"x":1613.0,"y":1042.7,"a":""}]},{"c":"#000000","p":[{"x":304.0,"y":1090.7,"a":""},{"x":304.3,"y":1181.6,"a":""}]},{"c":"#000000","p":[{"x":1541.7,"y":299.3,"a":""},{"x":1047.7,"y":302.3,"a":""}]},{"c":"#000000","p":[{"x":775.7,"y":398.3,"a":""},{"x":806.7,"y":398.4,"a":""}]},{"c":"#000000","p":[{"x":526.0,"y":435.0,"a":""},{"x":526.0,"y":462.0,"a":""}]},{"c":"#000000","p":[{"x":1045.7,"y":301.3,"a":""},{"x":1045.3,"y":342.8,"a":""}]},{"c":"#000000","p":[{"x":1824.3,"y":413.3,"a":""},{"x":1863.0,"y":414.0,"a":""}]},{"c":"#000000","p":[{"x":842.3,"y":829.5,"a":""},{"x":972.7,"y":830.5,"a":""}]},{"c":"#000000","p":[{"x":394.3,"y":1181.6,"a":""},{"x":661.3,"y":1089.3,"a":""}]},{"c":"#000000","p":[{"x":1798.7,"y":1069.3,"a":""},{"x":1703.0,"y":1042.7,"a":""}]}],"shapes":[{"s":"Rectangle","x":2177.7,"y":805.2,"w":157.4,"h":70.7,"f":"#ffffff","c":"#000000"},{"s":"Oval","x":407.4,"y":988.3,"w":302.5,"h":271.5,"f":"#ffffff","c":"#c0c0c0"},{"s":"Oval","x":854.1,"y":965.5,"w":156.5,"h":147.0,"f":"#ffffff","c":"#c0c0c0"},{"s":"Rectangle","x":334.0,"y":122.3,"w":163.5,"h":31.5,"f":"#ffffff","c":"#000000"},{"s":"Rectangle","x":1519.9,"y":613.3,"w":163.5,"h":34.7,"f":"#ffffff","c":"#000000"},{"s":"Rectangle","x":1734.4,"y":121.0,"w":199.8,"h":34.7,"f":"#ffffff","c":"#000000"},{"s":"Rectangle","x":802.3,"y":129.3,"w":514.0,"h":38.7,"f":"#ffffff","c":"#000000"},{"s":"Rectangle","x":828.7,"y":307.3,"w":284.0,"h":36.0,"f":"#ffffff","c":"#000000"},{"s":"Rectangle","x":1269.1,"y":778.7,"w":221.8,"h":42.7,"f":"#ffffff","c":"#000000"},{"s":"Rectangle","x":1728.4,"y":881.7,"w":221.8,"h":48.7,"f":"#ffffff","c":"#000000"},{"s":"Rectangle","x":1226.1,"y":1207.0,"w":221.8,"h":30.0,"f":"#ffffff","c":"#000000"},{"s":"Rectangle","x":2028.7,"y":1100.7,"w":114.0,"h":33.3,"f":"#ffffff","c":"#000000"},{"s":"Rectangle","x":779.0,"y":665.3,"w":198.0,"h":57.3,"f":"#ffffff","c":"#000000"},{"s":"Rectangle","x":131.3,"y":122.3,"w":204.5,"h":31.5,"f":"#ffffff","c":"#000000"},{"s":"Rectangle","x":1977.1,"y":1203.7,"w":221.8,"h":30.0,"f":"#ffffff","c":"#000000"},{"s":"Rectangle","x":524.3,"y":288.0,"w":199.3,"h":36.0,"f":"#ffffff","c":"#000000"},{"s":"Rectangle","x":2184.6,"y":583.7,"w":276.2,"h":46.0,"f":"#ffffff","c":"#000000"},{"s":"Rectangle","x":313.2,"y":218.3,"w":210.9,"h":30.0,"f":"#ffffff","c":"#000000"}],"labels":[{"t":"Vitamin A metabolism","x":2182.9,"y":808.8,"w":182.8,"h":61.0,"sz":14.0,"b":true}]},"integrated":{"name":"All Metabolites","bw":2541.2097362151544,"bh":1326.5113788487288,"nodes":[{"t":"D-Glucuronolactone","x":1172.7,"y":209.3,"w":84.9,"h":23.0,"cas":"32449-92-6"},{"t":"Orotate","x":1763.8,"y":209.2,"w":74.5,"h":30.6,"cas":"65-86-1"},{"t":"Urea","x":1101.2,"y":959.8,"w":83.5,"h":26.5,"cas":"57-13-6"},{"t":"Nicotinamide mononucleotide","x":125.0,"y":332.3,"w":176.5,"h":32.3,"cas":"1094-61-7"},{"t":"Ribose","x":936.9,"y":349.9,"w":63.0,"h":34.9,"cas":"50-69-1"},{"t":"Tartrate","x":606.7,"y":903.6,"w":62.9,"h":19.5,"cas":"87-69-4"},{"t":"2-Phosphoglycerate","x":463.9,"y":652.8,"w":85.6,"h":28.4,"cas":"447-28-9"},{"t":"Quinolinate","x":1678.3,"y":712.1,"w":85.3,"h":27.2,"cas":"89-00-9"},{"t":"Isocitrate","x":607.3,"y":875.3,"w":70.8,"h":21.6,"cas":"320-77-4"},{"t":"dUTP","x":1766.3,"y":172.8,"w":77.0,"h":26.8,"cas":"1173-82-6"},{"t":"Glyceraldehyde","x":1042.9,"y":398.0,"w":88.6,"h":25.3,"cas":"453-17-8"},{"t":"3-AIBA","x":858.8,"y":175.1,"w":98.7,"h":32.4,"cas":"144-90-1"},{"t":"Theophylline","x":1795.4,"y":308.8,"w":70.9,"h":27.3,"cas":"58-55-9"},{"t":"Carnosine","x":776.8,"y":1231.8,"w":80.7,"h":25.8,"cas":"305-84-0"},{"t":"CDP-choline (1+)","x":1332.9,"y":155.5,"w":106.9,"h":26.7,"cas":"987-87-0"},{"t":"dTTP","x":1670.0,"y":209.8,"w":75.8,"h":26.8,"cas":"365-08-2"},{"t":"3-Dehydroshimimate","x":1302.9,"y":823.6,"w":91.6,"h":24.8,"cas":"3972-65-0"},{"t":"6-Thio-2-Deoxyguanosine","x":1574.3,"y":450.8,"w":80.7,"h":21.1,"cas":"56079-65-5"},{"t":"Arginiocuccinic \nacid","x":815.5,"y":905.0,"w":101.0,"h":28.0,"cas":"2387-71-5"},{"t":"H-Ser","x":1662.4,"y":1115.2,"w":65.6,"h":32.4,"cas":"56-45-1"},{"t":"Folate","x":2188.9,"y":752.2,"w":114.4,"h":28.6,"cas":"59-30-3"},{"t":"4-Pyridoxate","x":2375.3,"y":914.7,"w":84.9,"h":27.2,"cas":"82-82-6"},{"t":"dCTP","x":1673.5,"y":170.9,"w":74.0,"h":25.5,"cas":"2056-98-6"},{"t":"dTDP-D-glucose","x":2200.2,"y":518.7,"w":111.6,"h":31.4,"cas":"5118-33-4"},{"t":"Pyridoxine","x":2376.4,"y":950.7,"w":83.4,"h":24.3,"cas":"65-23-6"},{"t":"Deoxyribose","x":865.8,"y":345.4,"w":65.6,"h":35.7,"cas":"533-67-5"},{"t":"Retinol Acetate","x":2189.7,"y":915.8,"w":110.2,"h":25.0,"cas":"127-47-9"},{"t":"Diaminopimelate","x":1889.3,"y":1187.5,"w":94.7,"h":24.4,"cas":"583-93-7"},{"t":"Galactitol","x":316.9,"y":269.8,"w":91.9,"h":20.2,"cas":"608-66-2"},{"t":"GLUCOSAMINE 6-PHOSPHATE","x":2228.3,"y":249.4,"w":179.1,"h":21.6,"cas":"3326-54-1"},{"t":"Glucose","x":526.0,"y":335.0,"w":90.0,"h":25.0,"cas":"492-62-6"},{"t":"2-Depxuguansoine","x":1572.0,"y":417.7,"w":71.0,"h":24.8,"cas":"961-07-9"},{"t":"Aminoadipate","x":1216.3,"y":1088.4,"w":96.1,"h":25.8,"cas":"131-64-8"},{"t":"3-sulfinoalanine","x":2038.4,"y":985.2,"w":100.4,"h":26.7,"cas":"526-90-9"},{"t":"Diethanolamine","x":2196.0,"y":385.8,"w":97.5,"h":24.4,"cas":"111-42-2"},{"t":"O-Succinyl-L-homoserine","x":2015.5,"y":1188.1,"w":138.6,"h":25.7,"cas":"6783-12-2"},{"t":"2,5-Dihydrobenzoic acid","x":1200.6,"y":823.4,"w":87.3,"h":27.5,"cas":"490-79-9"},{"t":"P-Ser","x":1570.5,"y":1116.5,"w":60.4,"h":34.9,"cas":"407-41-0"},{"t":"Allantoin","x":1636.9,"y":603.1,"w":87.7,"h":23.0,"cas":"97-59-6"},{"t":"Glucosamine","x":2189.6,"y":276.8,"w":101.8,"h":23.0,"cas":"3416-24-8"},{"t":"Nicotinamide","x":121.8,"y":385.0,"w":119.4,"h":28.6,"cas":"98-92-0"},{"t":"Aspartylglycosamine","x":2202.3,"y":140.4,"w":124.3,"h":25.8,"cas":"80866-02-0"},{"t":"Dihydrouracil","x":1711.9,"y":277.0,"w":90.0,"h":25.0,"cas":"504-07-4"},{"t":"Xanthosine","x":1711.7,"y":310.3,"w":84.2,"h":27.3,"cas":"146-80-5"},{"t":"Gys-Gly","x":673.7,"y":1272.6,"w":92.8,"h":23.0,"cas":"2140-97-6"},{"t":"1-Methyl-L-Histidine","x":777.1,"y":1193.3,"w":84.5,"h":25.2,"cas":"368-16-1"},{"t":"G6P","x":526.0,"y":376.0,"w":90.0,"h":24.0,"cas":"56-73-5"},{"t":"F6P","x":526.0,"y":422.5,"w":90.0,"h":25.0,"cas":"643-13-0"},{"t":"FBP","x":526.0,"y":474.5,"w":90.0,"h":25.0,"cas":"34693-15-7"},{"t":"DHAP","x":458.3,"y":529.5,"w":90.0,"h":25.0,"cas":"57-04-5"},{"t":"GAP","x":582.0,"y":527.5,"w":90.0,"h":25.0,"cas":"591-57-1"},{"t":"1,3-BPG","x":583.0,"y":568.5,"w":90.0,"h":25.0,"cas":"1981-49-3"},{"t":"3PG","x":582.0,"y":612.5,"w":90.0,"h":25.0,"cas":"820-11-1"},{"t":"Succinate","x":303.3,"y":1077.8,"w":90.0,"h":25.0,"cas":"110-15-6"},{"t":"PEP","x":582.0,"y":692.5,"w":90.0,"h":25.0,"cas":"138-08-9"},{"t":"Succinyl-CoA","x":406.3,"y":1130.8,"w":90.0,"h":25.0,"cas":"604-98-8"},{"t":"Citric","x":510.3,"y":878.8,"w":90.0,"h":25.0,"cas":"77-92-9"},{"t":"OAA","x":315.3,"y":878.8,"w":90.0,"h":25.0,"cas":"328-42-7"},{"t":"Acetyl-CoA","x":582.0,"y":788.7,"w":90.0,"h":28.0,"cas":"72-89-9"},{"t":"Pyruvate","x":582.0,"y":735.8,"w":90.0,"h":25.0,"cas":"127-17-3"},{"t":"cis-Aconitate","x":557.3,"y":940.8,"w":90.0,"h":25.0,"cas":"499-12-7"},{"t":"alpha-KG","x":513.3,"y":1076.8,"w":90.0,"h":25.0,"cas":"328-50-7"},{"t":"Fumarate","x":256.3,"y":1002.8,"w":90.0,"h":25.0,"cas":"110-17-8"},{"t":"Lactate","x":458.3,"y":735.8,"w":90.0,"h":25.0,"cas":"50-21-5"},{"t":"2-HG","x":661.3,"y":1038.8,"w":90.0,"h":25.0,"cas":"13095-48-2"},{"t":"Glutamine","x":771.3,"y":1076.8,"w":90.0,"h":25.0,"cas":"56-85-9"},{"t":"Glutamate","x":661.3,"y":1076.8,"w":90.0,"h":25.0,"cas":"56-86-0"},{"t":"Itaconate","x":664.3,"y":940.8,"w":90.0,"h":25.0,"cas":"97-65-4"},{"t":"Malate","x":271.3,"y":940.8,"w":90.0,"h":25.0,"cas":"97-67-6"},{"t":"6PG","x":784.8,"y":356.7,"w":56.8,"h":25.0,"cas":"921-62-0"},{"t":"Ru5P","x":851.7,"y":404.7,"w":90.0,"h":25.0,"cas":"551-85-9"},{"t":"FMN","x":913.3,"y":555.3,"w":90.0,"h":25.0,"cas":"146-17-8"},{"t":"R5P","x":851.3,"y":485.3,"w":90.0,"h":25.0,"cas":"4300-28-1"},{"t":"E4P","x":717.3,"y":493.3,"w":90.0,"h":25.0,"cas":"585-18-2"},{"t":"Xu5P","x":729.3,"y":401.0,"w":90.0,"h":25.0,"cas":"492-62-6"},{"t":"S7P","x":791.3,"y":554.3,"w":90.0,"h":25.0,"cas":"2646-35-7"},{"t":"Isocitric","x":546.3,"y":1002.8,"w":90.0,"h":25.0,"cas":"372-75-8"},{"t":"Glycerate","x":462.0,"y":607.4,"w":90.0,"h":25.0,"cas":"473-81-4"},{"t":"2PG","x":582.0,"y":650.5,"w":90.0,"h":25.0,"cas":"3443-57-0"},{"t":"Pro","x":886.7,"y":1148.7,"w":90.0,"h":25.0,"cas":"147-85-3"},{"t":"Hydroxyproline","x":887.3,"y":1201.3,"w":90.0,"h":25.0,"cas":"51-35-4"},{"t":"His","x":779.3,"y":1150.7,"w":90.0,"h":25.0,"cas":"71-00-1"},{"t":"GSH","x":676.0,"y":1150.0,"w":90.0,"h":25.0,"cas":"70-18-8"},{"t":"GSSG","x":676.0,"y":1193.3,"w":90.0,"h":25.0,"cas":"27025-41-8"},{"t":"Citrulline","x":765.3,"y":985.5,"w":90.0,"h":25.0,"cas":"372-75-8"},{"t":"Arg","x":949.3,"y":960.2,"w":90.0,"h":25.0,"cas":"74-79-3"},{"t":"Ornithine","x":875.3,"y":1038.2,"w":90.0,"h":25.0,"cas":"70-26-8"},{"t":"Creatine","x":978.5,"y":1039.1,"w":90.0,"h":25.0,"cas":"57-00-1"},{"t":"GSNO","x":676.0,"y":1231.3,"w":90.0,"h":25.0,"cas":"57564-91-7"},{"t":"Asp","x":797.3,"y":829.5,"w":90.0,"h":25.0,"cas":"56-84-8"},{"t":"b-Ala","x":1017.7,"y":830.5,"w":90.0,"h":25.0,"cas":"107-95-9"},{"t":"Ala","x":1018.3,"y":674.5,"w":90.0,"h":25.0,"cas":"56-41-7"},{"t":"PRPP","x":1045.3,"y":355.3,"w":90.0,"h":25.0,"cas":""},{"t":"AICAR","x":1587.3,"y":300.0,"w":90.0,"h":25.0,"cas":""},{"t":"IMP","x":1514.7,"y":344.7,"w":90.0,"h":25.0,"cas":"131-99-7"},{"t":"IDP","x":1713.3,"y":346.0,"w":90.0,"h":25.0,"cas":"86-04-4"},{"t":"ITP","x":1823.3,"y":345.3,"w":90.0,"h":25.0,"cas":"132-06-9"},{"t":"GMP","x":1764.5,"y":417.5,"w":90.0,"h":25.0,"cas":"85-32-5"},{"t":"GTP","x":1870.5,"y":418.2,"w":90.0,"h":25.0,"cas":"86-01-1"},{"t":"GDP","x":1871.1,"y":454.9,"w":90.0,"h":25.0,"cas":"146-91-8"},{"t":"dGDP","x":1873.1,"y":491.5,"w":90.0,"h":25.0,"cas":"3493-09-2"},{"t":"dGMP","x":1768.5,"y":490.9,"w":90.0,"h":25.0,"cas":"902-04-5"},{"t":"dGTP","x":1874.5,"y":528.9,"w":90.0,"h":25.0,"cas":"2564-35-4"},{"t":"dG","x":1667.8,"y":491.5,"w":90.0,"h":25.0,"cas":"961-07-9"},{"t":"Guanine","x":1667.8,"y":455.5,"w":90.0,"h":25.0,"cas":"73-40-5"},{"t":"Guanosine","x":1665.8,"y":417.2,"w":90.0,"h":25.0,"cas":"118-00-3"},{"t":"Xanthine","x":1635.0,"y":561.2,"w":90.0,"h":25.0,"cas":"69-89-6"},{"t":"Urate","x":1781.9,"y":566.4,"w":90.0,"h":25.0,"cas":"69-93-2"},{"t":"Hypoxanthine","x":1347.7,"y":556.0,"w":90.0,"h":25.0,"cas":"68-94-0"},{"t":"Adenine","x":1349.7,"y":475.3,"w":90.0,"h":25.0,"cas":"73-24-5"},{"t":"dA","x":1347.7,"y":517.7,"w":90.0,"h":25.0,"cas":"958-09-8"},{"t":"Adenosine","x":1350.3,"y":434.3,"w":90.0,"h":25.0,"cas":"58-61-7"},{"t":"Inosine","x":1479.3,"y":436.3,"w":90.0,"h":25.0,"cas":"58-63-9"},{"t":"AMP","x":1247.0,"y":434.3,"w":90.0,"h":25.0,"cas":"61-19-8"},{"t":"ATP","x":1149.0,"y":433.0,"w":90.0,"h":25.0,"cas":"56-65-5"},{"t":"ADP","x":1149.0,"y":479.7,"w":90.0,"h":25.0,"cas":"58-64-0"},{"t":"dAMP","x":1226.0,"y":517.7,"w":90.0,"h":25.0,"cas":"653-63-4"},{"t":"Kynurenine","x":1364.0,"y":674.2,"w":90.0,"h":25.0,"cas":"2922-83-0"},{"t":"Kynurenate","x":1364.0,"y":713.5,"w":90.0,"h":25.0,"cas":"492-27-3"},{"t":"Trp","x":1534.7,"y":675.2,"w":90.0,"h":25.0,"cas":"73-22-3"},{"t":"UMP","x":1493.3,"y":246.2,"w":90.0,"h":25.0,"cas":"58-97-9"},{"t":"Uracil","x":1602.3,"y":246.2,"w":90.0,"h":25.0,"cas":"66-22-8"},{"t":"Uridine","x":1713.1,"y":247.3,"w":90.0,"h":27.8,"cas":"58-96-8"},{"t":"UDP","x":1448.3,"y":192.5,"w":90.0,"h":25.0,"cas":"58-98-0"},{"t":"UTP","x":1380.3,"y":246.2,"w":90.0,"h":25.0,"cas":"63-39-8"},{"t":"CTP","x":1202.2,"y":154.4,"w":83.7,"h":25.0,"cas":"65-47-4"},{"t":"CDP","x":1460.2,"y":154.4,"w":87.0,"h":26.0,"cas":"63-38-7"},{"t":"CMP","x":1563.2,"y":154.4,"w":75.0,"h":23.8,"cas":"63-37-6"},{"t":"Thymidine","x":1678.7,"y":76.2,"w":90.0,"h":25.0,"cas":"50-89-5"},{"t":"Thymine","x":1544.7,"y":76.2,"w":90.0,"h":25.0,"cas":"65-71-4"},{"t":"dCDP","x":1967.7,"y":114.2,"w":90.0,"h":25.0,"cas":"800-73-7"},{"t":"dCMP","x":1967.7,"y":188.8,"w":90.0,"h":25.0,"cas":"1032-65-1"},{"t":"Cytosine","x":1890.7,"y":230.2,"w":90.0,"h":25.0,"cas":"71-30-7"},{"t":"Val","x":598.0,"y":167.3,"w":90.0,"h":25.0,"cas":"72-18-4"},{"t":"Ile","x":598.0,"y":200.0,"w":90.0,"h":25.0,"cas":"73-32-5"},{"t":"Leu","x":598.0,"y":234.0,"w":90.0,"h":25.0,"cas":"61-90-5"},{"t":"Tyr","x":1528.7,"y":763.5,"w":90.0,"h":25.0,"cas":"60-18-4"},{"t":"Phe","x":1644.0,"y":763.5,"w":90.0,"h":25.0,"cas":"63-91-2"},{"t":"Cys","x":1847.3,"y":982.7,"w":90.0,"h":25.0,"cas":"52-90-4"},{"t":"Cystine","x":1733.3,"y":963.3,"w":90.0,"h":25.0,"cas":"56-89-3"},{"t":"Cysthi","x":1820.0,"y":1040.7,"w":90.0,"h":25.0,"cas":"56-88-2"},{"t":"Taurine","x":2041.9,"y":1087.2,"w":90.0,"h":25.0,"cas":"107-35-7"},{"t":"Ser","x":1767.0,"y":1113.0,"w":90.0,"h":25.0,"cas":"56-45-1"},{"t":"Gly","x":1767.0,"y":1207.0,"w":90.0,"h":25.0,"cas":"56-40-6"},{"t":"Thr","x":1883.3,"y":1153.3,"w":90.0,"h":25.0,"cas":"72-19-5"},{"t":"Sarcosine","x":1664.3,"y":1207.0,"w":90.0,"h":25.0,"cas":"107-97-1"},{"t":"DMG","x":1558.7,"y":1207.0,"w":90.0,"h":25.0,"cas":"1118-68-9"},{"t":"Betaine","x":1451.3,"y":1207.0,"w":90.0,"h":25.0,"cas":"107-43-7"},{"t":"Homocysteine","x":1658.0,"y":1042.7,"w":90.0,"h":25.0,"cas":"6027-13-0"},{"t":"Met","x":1616.0,"y":998.7,"w":90.0,"h":25.0,"cas":"63-68-3"},{"t":"SAM","x":1503.3,"y":998.7,"w":90.0,"h":25.0,"cas":"29908-03-0"},{"t":"SAH","x":1540.0,"y":1042.0,"w":90.0,"h":25.0,"cas":"979-92-0"},{"t":"cGMP","x":1828.5,"y":383.2,"w":90.0,"h":25.0,"cas":"7665-99-8"},{"t":"2-oxoisovalerate","x":731.8,"y":172.0,"w":107.0,"h":25.0,"cas":"759-05-7"},{"t":"2-oxovalerate","x":731.8,"y":202.0,"w":107.0,"h":25.0,"cas":"1821-02-9"},{"t":"3-Aminoisobutyric acid","x":731.8,"y":236.0,"w":151.7,"h":25.0,"cas":"144-90-1"},{"t":"GABA","x":349.3,"y":1187.8,"w":90.0,"h":25.0,"cas":"56-12-2"},{"t":"5-oxoproline","x":478.0,"y":1189.8,"w":90.0,"h":25.0,"cas":"98-79-3"},{"t":"7,8-Dihydrobiopterin","x":2026.6,"y":418.9,"w":145.0,"h":25.0,"cas":"6779-87-9"},{"t":"Adenylosuccinic acid","x":1247.0,"y":344.7,"w":149.7,"h":25.0,"cas":"19046-78-7"},{"t":"Asparagine","x":797.3,"y":790.8,"w":90.0,"h":23.7,"cas":"2058-58-4"},{"t":"Biotin","x":1733.3,"y":932.7,"w":90.0,"h":25.0,"cas":"58-85-5"},{"t":"cAMP","x":1149.0,"y":393.9,"w":90.0,"h":25.5,"cas":"60-92-4"},{"t":"CoA","x":458.0,"y":789.3,"w":90.0,"h":25.0,"cas":"85-61-0"},{"t":"Cytidine","x":1890.7,"y":277.5,"w":90.0,"h":25.0,"cas":"65-46-3"},{"t":"dC","x":1272.3,"y":246.8,"w":90.0,"h":25.0,"cas":"951-77-9"},{"t":"2-deoxyinosine","x":1418.5,"y":389.0,"w":98.3,"h":25.0,"cas":"890-38-0"},{"t":"dU","x":1272.3,"y":210.2,"w":90.0,"h":25.0,"cas":"951-78-0"},{"t":"G1P","x":319.9,"y":166.4,"w":90.0,"h":24.0,"cas":"59-56-3"},{"t":"Glycerate","x":1893.0,"y":1113.0,"w":90.0,"h":25.0,"cas":"473-81-4"},{"t":"Inositol","x":131.3,"y":165.0,"w":90.0,"h":25.0,"cas":"6917-35-7"},{"t":"L-1-Pyrroline-3-hydroxy-5-carboxylate","x":965.1,"y":1232.3,"w":244.3,"h":25.0,"cas":"C04281"},{"t":"L-2-Aminoadipate","x":367.5,"y":1232.7,"w":118.3,"h":25.0,"cas":"542-32-5"},{"t":"Lysine","x":1341.3,"y":1090.2,"w":90.0,"h":25.0,"cas":"56-87-1"},{"t":"Homoserine","x":1341.3,"y":1128.2,"w":90.0,"h":25.0,"cas":"672-15-1"},{"t":"Allothreonine","x":1341.3,"y":1166.2,"w":90.0,"h":30.3,"cas":"28954-12-3"},{"t":"Malonyl-CoA","x":698.7,"y":788.7,"w":90.0,"h":28.0,"cas":"524-14-1"},{"t":"N-Acetyl-Asp","x":910.0,"y":770.2,"w":90.0,"h":25.0,"cas":"997-55-7"},{"t":"NAD+","x":123.4,"y":556.2,"w":90.0,"h":25.0,"cas":"53-84-9"},{"t":"NADH","x":123.4,"y":588.9,"w":90.0,"h":25.0,"cas":"58-68-4"},{"t":"NADP+","x":124.7,"y":489.5,"w":90.0,"h":25.0,"cas":"53-59-8"},{"t":"NADPH","x":124.7,"y":524.9,"w":90.0,"h":25.0,"cas":"53-57-6"},{"t":"N-Carbamoyl-L-Asp","x":913.5,"y":802.8,"w":122.3,"h":25.0,"cas":"13184-27-5"},{"t":"O-Acetyl-L-Ser","x":1733.3,"y":996.0,"w":90.0,"h":25.0,"cas":"5147-00-2"},{"t":"O-Phosphoethanolamine","x":1209.5,"y":1248.7,"w":175.7,"h":25.0,"cas":"1071-23-4"},{"t":"Phenylacetylglycine","x":1915.9,"y":1276.4,"w":136.3,"h":25.0,"cas":"500-98-1"},{"t":"TMP","x":1969.3,"y":76.8,"w":90.0,"h":25.0,"cas":"291-03-2"},{"t":"5-Formyl THF","x":2189.2,"y":637.3,"w":116.3,"h":25.0,"cas":"58-05-9"},{"t":"5-Methyl THF","x":2189.2,"y":673.4,"w":116.3,"h":29.2,"cas":"134-35-0"},{"t":"Dihydrofolate","x":2189.2,"y":711.4,"w":116.3,"h":29.2,"cas":"4033-27-6"},{"t":"Tryptamine","x":1676.7,"y":675.2,"w":90.0,"h":25.0,"cas":"61-54-1"},{"t":"Creatinine","x":978.6,"y":1090.5,"w":90.0,"h":25.0,"cas":"60-27-5"},{"t":"Dihydroorotate","x":493.0,"y":1234.0,"w":90.0,"h":25.0,"cas":"5988-19-2"},{"t":"dTDP-D-Glucose","x":631.1,"y":357.3,"w":73.9,"h":25.0,"cas":"2196-62-5"},{"t":"GLN6P","x":711.8,"y":356.0,"w":56.8,"h":25.0,"cas":"3616-42-0"},{"t":"Gly-D5","x":1767.1,"y":1244.9,"w":90.0,"h":25.0,"cas":"4896-77-9"},{"t":"Guandinoacetate","x":1768.0,"y":1284.0,"w":90.0,"h":25.0,"cas":"352-97-6"},{"t":"Hypotaurine","x":2039.9,"y":1051.3,"w":90.0,"h":25.0,"cas":"300-84-5"},{"t":"N-acetlymanosamine","x":322.7,"y":199.2,"w":113.7,"h":25.0,"cas":"7772-94-3"},{"t":"N-acetylneuraminate","x":322.9,"y":232.7,"w":111.3,"h":25.0,"cas":"131-48-6"},{"t":"N-Methyl-Alanine","x":1022.8,"y":637.2,"w":90.0,"h":25.0,"cas":"600-22-6"},{"t":"Quinate","x":1806.5,"y":674.2,"w":90.0,"h":25.0,"cas":"77-95-2"},{"t":"Purine","x":1805.7,"y":711.0,"w":90.0,"h":25.0,"cas":"120-73-0"}],"ixns":[{"c":"#000000","p":[{"x":1496.3,"y":1207.0,"a":""},{"x":1513.7,"y":1207.0,"a":""}]},{"c":"#000000","p":[{"x":791.3,"y":541.8,"a":""},{"x":717.3,"y":505.8,"a":""}]},{"c":"#000000","p":[{"x":1873.7,"y":190.3,"a":""},{"x":1748.0,"y":190.7,"a":""}]},{"c":"#000000","p":[{"x":1016.0,"y":729.3,"a":""},{"x":627.0,"y":729.6,"a":""}]},{"c":"#000000","p":[{"x":1548.3,"y":998.7,"a":""},{"x":1571.0,"y":998.7,"a":""}]},{"c":"#000000","p":[{"x":526.0,"y":388.0,"a":""},{"x":526.0,"y":410.0,"a":""}]},{"c":"#000000","p":[{"x":1764.5,"y":430.0,"a":""},{"x":1826.1,"y":454.9,"a":""}]},{"c":"#000000","p":[{"x":1409.3,"y":1072.0,"a":""},{"x":1408.0,"y":740.0,"a":""}]},{"c":"#000000","p":[{"x":681.3,"y":741.3,"a":""},{"x":627.0,"y":742.1,"a":"Arrow"}]},{"c":"#000000","p":[{"x":1149.0,"y":406.7,"a":""},{"x":1149.0,"y":420.5,"a":""}]},{"c":"#000000","p":[{"x":579.7,"y":803.3,"a":""},{"x":407.4,"y":852.5,"a":""}]},{"c":"#000000","p":[{"x":1872.0,"y":77.3,"a":""},{"x":1872.7,"y":190.3,"a":""}]},{"c":"#000000","p":[{"x":1767.0,"y":1125.5,"a":""},{"x":1767.0,"y":1194.5,"a":""}]},{"c":"#000000","p":[{"x":525.3,"y":345.7,"a":""},{"x":526.0,"y":364.0,"a":""}]},{"c":"#000000","p":[{"x":797.3,"y":842.0,"a":""},{"x":797.3,"y":862.7,"a":""}]},{"c":"#000000","p":[{"x":627.0,"y":788.7,"a":""},{"x":653.7,"y":788.7,"a":""}]},{"c":"#000000","p":[{"x":996.0,"y":959.0,"a":""},{"x":1059.5,"y":959.8,"a":""}]},{"c":"#000000","p":[{"x":661.7,"y":1090.3,"a":""},{"x":886.7,"y":1136.2,"a":""}]},{"c":"#000000","p":[{"x":978.5,"y":1051.6,"a":""},{"x":978.6,"y":1078.0,"a":""}]},{"c":"#000000","p":[{"x":772.7,"y":1064.3,"a":""},{"x":801.7,"y":1021.3,"a":""}]},{"c":"#000000","p":[{"x":1346.7,"y":530.3,"a":""},{"x":1347.7,"y":543.5,"a":""}]},{"c":"#000000","p":[{"x":1809.5,"y":417.5,"a":""},{"x":1825.5,"y":418.2,"a":""}]},{"c":"#000000","p":[{"x":851.3,"y":497.8,"a":""},{"x":913.3,"y":542.8,"a":""}]},{"c":"#000000","p":[{"x":1469.7,"y":344.7,"a":""},{"x":1321.8,"y":344.7,"a":""}]},{"c":"#000000","p":[{"x":1635.0,"y":573.7,"a":""},{"x":1636.9,"y":591.6,"a":""}]},{"c":"#000000","p":[{"x":1622.8,"y":455.5,"a":""},{"x":1602.0,"y":513.4,"a":""}]},{"c":"#000000","p":[{"x":1766.7,"y":1076.0,"a":""},{"x":1409.3,"y":1072.0,"a":""}]},{"c":"#000000","p":[{"x":1479.3,"y":423.8,"a":""},{"x":1514.7,"y":357.2,"a":""}]},{"c":"#000000","p":[{"x":672.3,"y":493.3,"a":""},{"x":571.0,"y":422.5,"a":""}]},{"c":"#000000","p":[{"x":1386.4,"y":155.5,"a":""},{"x":1416.7,"y":154.4,"a":""}]},{"c":"#000000","p":[{"x":851.7,"y":417.2,"a":""},{"x":851.3,"y":472.8,"a":""}]},{"c":"#000000","p":[{"x":1757.7,"y":345.3,"a":""},{"x":1778.3,"y":345.3,"a":""}]},{"c":"#000000","p":[{"x":662.7,"y":1087.3,"a":""},{"x":779.3,"y":1138.2,"a":""}]},{"c":"#000000","p":[{"x":1812.8,"y":490.2,"a":""},{"x":1828.1,"y":491.5,"a":""}]},{"c":"#000000","p":[{"x":1874.8,"y":503.2,"a":""},{"x":1874.5,"y":516.4,"a":""}]},{"c":"#000000","p":[{"x":1562.7,"y":344.3,"a":""},{"x":1668.3,"y":346.0,"a":""}]},{"c":"#000000","p":[{"x":1500.7,"y":76.3,"a":""},{"x":938.0,"y":74.0,"a":""}]},{"c":"#000000","p":[{"x":1347.7,"y":488.3,"a":""},{"x":1347.7,"y":505.2,"a":""}]},{"c":"#000000","p":[{"x":1571.0,"y":762.0,"a":""},{"x":1599.0,"y":763.5,"a":""}]},{"c":"#000000","p":[{"x":581.7,"y":753.3,"a":""},{"x":582.0,"y":774.7,"a":""}]},{"c":"#000000","p":[{"x":1821.8,"y":394.2,"a":""},{"x":1870.5,"y":405.7,"a":""}]},{"c":"#000000","p":[{"x":1514.7,"y":357.2,"a":""},{"x":1764.5,"y":405.0,"a":""}]},{"c":"#000000","p":[{"x":1616.7,"y":117.3,"a":""},{"x":1100.7,"y":119.3,"a":""}]},{"c":"#000000","p":[{"x":1408.0,"y":741.3,"a":""},{"x":680.0,"y":741.3,"a":""}]},{"c":"#000000","p":[{"x":1247.0,"y":357.2,"a":""},{"x":1247.0,"y":421.8,"a":""}]},{"c":"#000000","p":[{"x":582.0,"y":625.0,"a":""},{"x":582.0,"y":638.0,"a":""}]},{"c":"#000000","p":[{"x":1503.3,"y":1011.2,"a":""},{"x":1517.5,"y":1029.5,"a":""}]},{"c":"#000000","p":[{"x":1768.8,"y":503.2,"a":""},{"x":1829.5,"y":528.9,"a":""}]},{"c":"#000000","p":[{"x":2038.4,"y":998.6,"a":""},{"x":2039.9,"y":1038.8,"a":""}]},{"c":"#000000","p":[{"x":676.0,"y":1205.8,"a":""},{"x":676.0,"y":1218.8,"a":""}]},{"c":"#000000","p":[{"x":1585.7,"y":310.3,"a":""},{"x":1514.7,"y":332.2,"a":""}]},{"c":"#000000","p":[{"x":1503.7,"y":154.4,"a":""},{"x":1525.7,"y":154.4,"a":""}]},{"c":"#000000","p":[{"x":948.7,"y":972.3,"a":""},{"x":978.5,"y":1026.6,"a":""}]},{"c":"#000000","p":[{"x":1392.0,"y":865.3,"a":""},{"x":1394.7,"y":1146.7,"a":""}]},{"c":"#000000","p":[{"x":583.0,"y":581.0,"a":""},{"x":582.0,"y":600.0,"a":""}]},{"c":"#000000","p":[{"x":616.3,"y":1076.8,"a":""},{"x":558.3,"y":1076.8,"a":""}]},{"c":"#000000","p":[{"x":1406.3,"y":1207.0,"a":""},{"x":1337.0,"y":1207.0,"a":"Arrow"}]},{"c":"#000000","p":[{"x":1767.0,"y":1100.5,"a":""},{"x":1820.0,"y":1053.2,"a":""}]},{"c":"#000000","p":[{"x":526.0,"y":487.0,"a":""},{"x":458.3,"y":517.0,"a":""}]},{"c":"#000000","p":[{"x":1892.3,"y":982.7,"a":""},{"x":1988.2,"y":985.2,"a":""}]},{"c":"#000000","p":[{"x":1665.8,"y":429.7,"a":""},{"x":1667.8,"y":443.0,"a":""}]},{"c":"#000000","p":[{"x":1870.8,"y":429.2,"a":""},{"x":1871.1,"y":442.4,"a":""}]},{"c":"#000000","p":[{"x":1632.7,"y":1012.3,"a":""},{"x":1635.5,"y":1030.2,"a":""}]},{"c":"#000000","p":[{"x":1599.7,"y":156.3,"a":""},{"x":1889.7,"y":156.3,"a":""}]},{"c":"#000000","p":[{"x":776.3,"y":1160.7,"a":""},{"x":777.1,"y":1180.7,"a":""}]},{"c":"#000000","p":[{"x":1812.0,"y":1200.7,"a":""},{"x":1838.3,"y":1159.6,"a":""}]},{"c":"#000000","p":[{"x":1767.0,"y":1100.5,"a":""},{"x":1766.7,"y":1076.0,"a":""}]},{"c":"#000000","p":[{"x":896.3,"y":485.3,"a":""},{"x":1000.3,"y":355.3,"a":""}]},{"c":"#000000","p":[{"x":579.7,"y":663.3,"a":""},{"x":579.7,"y":679.3,"a":""}]},{"c":"#000000","p":[{"x":1871.1,"y":467.4,"a":""},{"x":1873.1,"y":479.0,"a":""}]},{"c":"#000000","p":[{"x":2041.9,"y":1099.7,"a":""},{"x":2074.3,"y":1133.0,"a":"Arrow"}]},{"c":"#000000","p":[{"x":936.7,"y":76.3,"a":""},{"x":936.0,"y":110.7,"a":"Arrow"}]},{"c":"#000000","p":[{"x":1538.7,"y":244.3,"a":""},{"x":1557.3,"y":246.2,"a":""}]},{"c":"#000000","p":[{"x":1408.7,"y":674.7,"a":""},{"x":1489.7,"y":675.2,"a":""}]},{"c":"#000000","p":[{"x":1194.0,"y":479.7,"a":""},{"x":1247.0,"y":446.8,"a":""}]},{"c":"#000000","p":[{"x":813.2,"y":350.4,"a":""},{"x":851.7,"y":392.2,"a":""}]},{"c":"#000000","p":[{"x":1348.7,"y":444.3,"a":""},{"x":1349.7,"y":462.8,"a":""}]},{"c":"#000000","p":[{"x":1434.3,"y":436.3,"a":""},{"x":1395.3,"y":434.3,"a":""}]},{"c":"#000000","p":[{"x":851.3,"y":497.8,"a":""},{"x":791.3,"y":541.8,"a":""}]},{"c":"#000000","p":[{"x":526.0,"y":487.0,"a":""},{"x":582.0,"y":515.0,"a":""}]},{"c":"#000000","p":[{"x":1099.7,"y":117.3,"a":""},{"x":1098.7,"y":829.3,"a":""}]},{"c":"#000000","p":[{"x":1439.7,"y":204.3,"a":""},{"x":1493.3,"y":233.7,"a":""}]},{"c":"#000000","p":[{"x":2039.9,"y":1063.8,"a":""},{"x":2041.9,"y":1074.7,"a":""}]},{"c":"#000000","p":[{"x":1494.7,"y":192.3,"a":""},{"x":1750.3,"y":190.8,"a":""}]},{"c":"#000000","p":[{"x":752.3,"y":829.5,"a":""},{"x":317.3,"y":836.3,"a":""}]},{"c":"#000000","p":[{"x":1305.3,"y":434.3,"a":""},{"x":1292.0,"y":434.3,"a":""}]},{"c":"#000000","p":[{"x":684.3,"y":401.0,"a":""},{"x":571.0,"y":422.5,"a":""}]},{"c":"#000000","p":[{"x":615.7,"y":1039.3,"a":""},{"x":535.8,"y":1064.3,"a":""}]},{"c":"#000000","p":[{"x":1579.7,"y":675.2,"a":""},{"x":1631.7,"y":675.2,"a":""}]},{"c":"#000000","p":[{"x":1479.3,"y":423.8,"a":""},{"x":1418.5,"y":401.5,"a":""}]},{"c":"#000000","p":[{"x":661.7,"y":1088.3,"a":""},{"x":676.0,"y":1137.5,"a":""}]},{"c":"#000000","p":[{"x":1364.0,"y":686.7,"a":""},{"x":1364.0,"y":701.0,"a":""}]},{"c":"#000000","p":[{"x":886.7,"y":1161.2,"a":""},{"x":887.3,"y":1188.8,"a":""}]},{"c":"#000000","p":[{"x":1456.8,"y":448.8,"a":""},{"x":1392.7,"y":549.7,"a":""}]},{"c":"#000000","p":[{"x":1098.7,"y":829.3,"a":""},{"x":1062.7,"y":830.5,"a":""}]},{"c":"#000000","p":[{"x":1271.0,"y":517.7,"a":""},{"x":1302.7,"y":517.7,"a":""}]},{"c":"#000000","p":[{"x":676.0,"y":1162.5,"a":""},{"x":676.0,"y":1180.8,"a":""}]},{"c":"#000000","p":[{"x":1722.0,"y":1207.0,"a":""},{"x":1709.3,"y":1207.0,"a":""}]},{"c":"#000000","p":[{"x":1891.7,"y":156.3,"a":""},{"x":1890.7,"y":217.7,"a":""}]},{"c":"#000000","p":[{"x":1318.7,"y":673.7,"a":""},{"x":1063.3,"y":674.5,"a":""}]},{"c":"#000000","p":[{"x":739.0,"y":354.8,"a":""},{"x":756.4,"y":356.7,"a":""}]},{"c":"#000000","p":[{"x":1604.8,"y":514.8,"a":""},{"x":1612.5,"y":548.7,"a":""}]},{"c":"#000000","p":[{"x":1017.3,"y":729.3,"a":""},{"x":1018.3,"y":687.0,"a":""}]},{"c":"#000000","p":[{"x":1680.0,"y":561.2,"a":""},{"x":1736.9,"y":560.2,"a":""}]},{"c":"#000000","p":[{"x":568.9,"y":376.2,"a":""},{"x":594.1,"y":351.1,"a":""}]},{"c":"#000000","p":[{"x":1616.7,"y":233.3,"a":""},{"x":1614.7,"y":118.3,"a":""}]},{"c":"#000000","p":[{"x":1396.0,"y":1149.3,"a":""},{"x":1838.3,"y":1153.3,"a":""}]},{"c":"#000000","p":[{"x":1645.7,"y":245.3,"a":""},{"x":1668.1,"y":247.3,"a":""}]},{"c":"#000000","p":[{"x":537.0,"y":606.3,"a":""},{"x":507.0,"y":607.4,"a":""}]},{"c":"#000000","p":[{"x":1812.0,"y":1113.0,"a":""},{"x":1848.0,"y":1113.0,"a":""}]},{"c":"#000000","p":[{"x":1149.0,"y":445.5,"a":""},{"x":1149.0,"y":467.2,"a":""}]},{"c":"#000000","p":[{"x":1440.7,"y":203.3,"a":""},{"x":1380.3,"y":233.7,"a":""}]},{"c":"#000000","p":[{"x":660.0,"y":1090.7,"a":""},{"x":478.0,"y":1177.3,"a":""}]},{"c":"#000000","p":[{"x":1695.8,"y":416.2,"a":""},{"x":1719.5,"y":417.5,"a":""}]},{"c":"#000000","p":[{"x":1603.7,"y":1207.0,"a":""},{"x":1619.3,"y":1207.0,"a":""}]},{"c":"#000000","p":[{"x":1760.8,"y":404.2,"a":""},{"x":1828.5,"y":395.7,"a":""}]},{"c":"#000000","p":[{"x":582.0,"y":540.0,"a":""},{"x":583.0,"y":556.0,"a":""}]},{"c":"#000000","p":[{"x":1295.4,"y":1090.0,"a":""},{"x":1264.4,"y":1088.4,"a":""}]},{"c":"#000000","p":[{"x":1224.5,"y":421.8,"a":""},{"x":1194.0,"y":393.9,"a":""}]},{"c":"#000000","p":[{"x":1967.7,"y":128.3,"a":""},{"x":1967.7,"y":176.3,"a":""}]},{"c":"#000000","p":[{"x":1723.7,"y":76.2,"a":""},{"x":1924.3,"y":76.8,"a":""}]},{"c":"#000000","p":[{"x":314.7,"y":837.3,"a":""},{"x":315.3,"y":866.3,"a":""}]},{"c":"#000000","p":[{"x":1590.7,"y":75.3,"a":""},{"x":1633.7,"y":76.2,"a":""}]},{"c":"#000000","p":[{"x":1422.7,"y":246.3,"a":""},{"x":1448.3,"y":246.2,"a":""}]},{"c":"#000000","p":[{"x":798.7,"y":862.7,"a":""},{"x":1390.7,"y":862.7,"a":""}]},{"c":"#000000","p":[{"x":503.3,"y":735.8,"a":""},{"x":537.0,"y":735.8,"a":""}]},{"c":"#000000","p":[{"x":1890.7,"y":242.7,"a":""},{"x":1890.7,"y":265.0,"a":""}]},{"c":"#000000","p":[{"x":1834.7,"y":1026.3,"a":""},{"x":1847.3,"y":995.2,"a":""}]},{"c":"#000000","p":[{"x":1202.7,"y":432.3,"a":""},{"x":1194.0,"y":433.0,"a":""}]},{"c":"#000000","p":[{"x":1244.1,"y":154.4,"a":""},{"x":1292.8,"y":154.3,"a":""}]},{"c":"#000000","p":[{"x":797.3,"y":802.7,"a":""},{"x":797.3,"y":817.0,"a":""}]},{"c":"#000000","p":[{"x":1667.8,"y":467.2,"a":""},{"x":1667.8,"y":479.0,"a":""}]},{"c":"#000000","p":[{"x":725.7,"y":1078.3,"a":""},{"x":706.3,"y":1076.8,"a":""}]},{"c":"#000000","p":[{"x":581.7,"y":705.3,"a":""},{"x":582.0,"y":723.3,"a":""}]},{"c":"#000000","p":[{"x":1583.7,"y":1042.3,"a":""},{"x":1613.0,"y":1042.7,"a":""}]},{"c":"#000000","p":[{"x":304.0,"y":1090.7,"a":""},{"x":304.3,"y":1181.6,"a":""}]},{"c":"#000000","p":[{"x":1541.7,"y":299.3,"a":""},{"x":1047.7,"y":302.3,"a":""}]},{"c":"#000000","p":[{"x":774.3,"y":401.0,"a":""},{"x":806.7,"y":398.4,"a":""}]},{"c":"#000000","p":[{"x":526.0,"y":435.0,"a":""},{"x":526.0,"y":462.0,"a":""}]},{"c":"#000000","p":[{"x":1045.7,"y":301.3,"a":""},{"x":1045.3,"y":342.8,"a":""}]},{"c":"#000000","p":[{"x":1915.5,"y":418.2,"a":""},{"x":1954.1,"y":418.9,"a":""}]},{"c":"#000000","p":[{"x":842.3,"y":829.5,"a":""},{"x":972.7,"y":830.5,"a":""}]},{"c":"#000000","p":[{"x":394.3,"y":1181.6,"a":""},{"x":661.3,"y":1089.3,"a":""}]},{"c":"#000000","p":[{"x":668.0,"y":357.3,"a":""},{"x":682.7,"y":357.4,"a":""}]},{"c":"#000000","p":[{"x":1798.7,"y":1069.3,"a":""},{"x":1703.0,"y":1042.7,"a":""}]}],"shapes":[{"s":"Rectangle","x":2223.9,"y":867.4,"w":179.5,"h":45.8,"f":"#ffffff","c":"#000000"},{"s":"Oval","x":407.4,"y":988.3,"w":302.5,"h":271.5,"f":"#ffffff","c":"#c0c0c0"},{"s":"Oval","x":854.1,"y":965.5,"w":156.5,"h":147.0,"f":"#ffffff","c":"#c0c0c0"},{"s":"Rectangle","x":334.0,"y":122.3,"w":163.5,"h":31.5,"f":"#ffffff","c":"#000000"},{"s":"Rectangle","x":1483.3,"y":634.4,"w":163.5,"h":34.7,"f":"#ffffff","c":"#000000"},{"s":"Rectangle","x":1734.4,"y":121.0,"w":199.8,"h":34.7,"f":"#ffffff","c":"#000000"},{"s":"Rectangle","x":802.3,"y":129.3,"w":514.0,"h":38.7,"f":"#ffffff","c":"#000000"},{"s":"Rectangle","x":832.7,"y":287.3,"w":284.0,"h":36.0,"f":"#ffffff","c":"#000000"},{"s":"Rectangle","x":1269.1,"y":778.7,"w":221.8,"h":42.7,"f":"#ffffff","c":"#000000"},{"s":"Rectangle","x":1728.4,"y":881.7,"w":221.8,"h":48.7,"f":"#ffffff","c":"#000000"},{"s":"Rectangle","x":1226.1,"y":1207.0,"w":221.8,"h":30.0,"f":"#ffffff","c":"#000000"},{"s":"Rectangle","x":2131.3,"y":1133.0,"w":114.0,"h":33.3,"f":"#ffffff","c":"#000000"},{"s":"Rectangle","x":779.0,"y":665.3,"w":198.0,"h":57.3,"f":"#ffffff","c":"#000000"},{"s":"Rectangle","x":131.3,"y":122.3,"w":204.5,"h":31.5,"f":"#ffffff","c":"#000000"},{"s":"Rectangle","x":1951.8,"y":1237.4,"w":221.8,"h":30.0,"f":"#ffffff","c":"#000000"},{"s":"Rectangle","x":524.3,"y":288.0,"w":199.3,"h":36.0,"f":"#ffffff","c":"#000000"},{"s":"Rectangle","x":2257.0,"y":587.4,"w":249.5,"h":49.7,"f":"#ffffff","c":"#000000"},{"s":"Rectangle","x":125.1,"y":446.1,"w":210.9,"h":30.0,"f":"#ffffff","c":"#000000"},{"s":"Rectangle","x":2420.1,"y":868.1,"w":179.5,"h":45.8,"f":"#ffffff","c":"#000000"}],"labels":[{"t":"Carbonhydrates Glycan Metabolism","x":2220.8,"y":93.6,"w":225.0,"h":65.9,"sz":16.0,"b":true},{"t":"Nicotinate and nicotinamide  metabolism","x":127.2,"y":281.9,"w":115.8,"h":84.2,"sz":14.0,"b":true},{"t":"Nucleotide sugar metabolism","x":2220.1,"y":442.4,"w":203.9,"h":85.6,"sz":16.0,"b":true},{"t":"Vitamin A metabolism","x":2223.6,"y":872.3,"w":174.4,"h":41.7,"sz":14.0,"b":true},{"t":"Amino sugar Metabolism ","x":2196.9,"y":211.0,"w":244.7,"h":81.4,"sz":16.0,"b":true},{"t":"Glycerophospholipid metablosim","x":2232.8,"y":336.2,"w":313.6,"h":78.6,"sz":16.0,"b":true},{"t":"Vitamin B metabolism","x":2424.0,"y":868.8,"w":174.4,"h":41.7,"sz":14.0,"b":true}]},"lipid":{"name":"Lipid Metabolites","bw":2270.507660952799,"bh":2107.7715430861717,"nodes":[{"t":"Glucos","x":283.5,"y":151.0,"w":93.0,"h":42.0,"cas":""},{"t":"FFA","x":1607.0,"y":124.7,"w":117.4,"h":31.6,"cas":""},{"t":"Glyceraldhyde-3-P","x":285.0,"y":250.0,"w":124.0,"h":42.0,"cas":""},{"t":"Pyruvate","x":281.0,"y":354.0,"w":80.0,"h":42.0,"cas":""},{"t":"Acetyl-CoA","x":477.4,"y":644.8,"w":80.0,"h":42.0,"cas":""},{"t":"Palmitoyl-CoA","x":473.6,"y":898.0,"w":106.0,"h":42.0,"cas":""},{"t":"Fatty acyl-CoA","x":471.2,"y":999.7,"w":106.0,"h":42.0,"cas":""},{"t":"LPA","x":608.1,"y":1186.2,"w":78.0,"h":42.0,"cas":""},{"t":"PA","x":606.6,"y":1303.0,"w":78.0,"h":42.0,"cas":""},{"t":"PG","x":367.0,"y":1340.2,"w":78.0,"h":42.0,"cas":""},{"t":"LPG","x":165.6,"y":1409.7,"w":81.0,"h":42.0,"cas":""},{"t":"Citrate","x":276.6,"y":644.0,"w":81.0,"h":42.0,"cas":""},{"t":"Alph-KG","x":271.2,"y":729.0,"w":81.0,"h":42.0,"cas":""},{"t":"oxaloacetate","x":126.2,"y":646.0,"w":81.0,"h":38.0,"cas":""},{"t":"Succinyl-CoA","x":121.2,"y":736.0,"w":81.0,"h":38.0,"cas":""},{"t":"PI","x":823.6,"y":1334.6,"w":78.0,"h":42.0,"cas":""},{"t":"LPI","x":1023.3,"y":1387.7,"w":78.0,"h":42.0,"cas":""},{"t":"DG","x":1474.5,"y":1187.8,"w":78.0,"h":42.0,"cas":""},{"t":"PE","x":1616.1,"y":1373.9,"w":78.0,"h":42.0,"cas":""},{"t":"PC","x":1614.4,"y":1037.7,"w":99.2,"h":60.5,"cas":""},{"t":"LPE","x":1796.4,"y":1479.1,"w":87.0,"h":39.4,"cas":""},{"t":"PS","x":1766.8,"y":1181.4,"w":78.0,"h":42.0,"cas":""},{"t":"LPC","x":1900.6,"y":783.6,"w":78.0,"h":42.0,"cas":""},{"t":"TG","x":1479.1,"y":563.8,"w":78.0,"h":42.0,"cas":""},{"t":"dhCer","x":649.0,"y":798.0,"w":106.0,"h":42.0,"cas":""},{"t":"Cer","x":807.2,"y":848.0,"w":106.0,"h":42.0,"cas":""},{"t":"SM","x":807.9,"y":1057.9,"w":106.0,"h":42.0,"cas":""},{"t":"GluCer","x":808.2,"y":578.2,"w":106.0,"h":42.0,"cas":""},{"t":"LacCer","x":1287.8,"y":579.3,"w":106.0,"h":42.0,"cas":""},{"t":"HMG-CoA","x":643.9,"y":645.3,"w":106.0,"h":42.0,"cas":""},{"t":"Cholesterol","x":642.0,"y":461.0,"w":106.0,"h":42.0,"cas":""},{"t":"CE","x":820.1,"y":459.0,"w":106.0,"h":42.0,"cas":""},{"t":"Fatty acyl-CoA","x":735.7,"y":368.8,"w":106.0,"h":42.0,"cas":""},{"t":"Fatty acyl-CoA","x":896.1,"y":215.3,"w":106.0,"h":42.0,"cas":""},{"t":"2(E)-Enoyl-CoA","x":482.0,"y":213.6,"w":106.0,"h":42.0,"cas":""},{"t":"3-Hydroxyacyl-CoA","x":483.0,"y":299.0,"w":106.0,"h":42.0,"cas":""},{"t":"3-Ketoacyl-CoA","x":482.5,"y":374.0,"w":106.0,"h":42.0,"cas":""},{"t":"Acetyl-CoA","x":336.1,"y":497.8,"w":80.0,"h":42.0,"cas":""},{"t":"Glyceraldhyde-3-P","x":209.1,"y":1174.8,"w":124.0,"h":42.0,"cas":""},{"t":"Malonyl-CoA","x":473.5,"y":797.1,"w":80.0,"h":42.0,"cas":""},{"t":"LPS","x":1949.2,"y":1182.5,"w":78.0,"h":42.0,"cas":""},{"t":"AC(10:0)","x":1104.4,"y":196.7,"w":85.0,"h":16.0,"cas":"LMFA07070006"},{"t":"AC(12:0)","x":1102.9,"y":216.7,"w":85.0,"h":16.0,"cas":"LMFA07070090"},{"t":"AC(12:1)","x":1102.9,"y":235.7,"w":85.0,"h":16.0,"cas":"LMFA07070115"},{"t":"Sphingosine","x":1026.7,"y":848.5,"w":106.0,"h":42.0,"cas":""},{"t":"S1p","x":1350.5,"y":847.9,"w":106.0,"h":42.0,"cas":""},{"t":"CA","x":818.3,"y":416.9,"w":76.5,"h":21.2,"cas":"LMST04010001"},{"t":"AC(14:0)","x":1103.1,"y":255.2,"w":86.8,"h":16.1,"cas":"LMFA07070107"},{"t":"AC(14:0)-OH","x":1102.5,"y":276.3,"w":86.8,"h":16.1,"cas":"LMFA07070045"},{"t":"AC(14:1)","x":1103.0,"y":296.1,"w":85.0,"h":16.0,"cas":"LMFA07070114"},{"t":"AC(14:1)-OH","x":1102.4,"y":316.1,"w":85.0,"h":16.0,"cas":"LMFA07070129"},{"t":"AC(14:2)","x":1101.3,"y":334.4,"w":87.3,"h":14.6,"cas":"LMFA07070020"},{"t":"AC(15:0)","x":1203.1,"y":196.3,"w":85.0,"h":16.0,"cas":"LMFA07070136"},{"t":"AC(16:0)-OH","x":1202.4,"y":237.3,"w":85.0,"h":16.0,"cas":"LMFA07070113"},{"t":"AC(16:0)","x":1203.1,"y":215.8,"w":85.0,"h":16.0,"cas":"LMFA07070004"},{"t":"AC(16:0)-OH","x":1202.9,"y":280.3,"w":85.0,"h":16.4,"cas":"LMFA07070044"},{"t":"AC(16:1)","x":1201.9,"y":257.6,"w":85.0,"h":16.0,"cas":"LMFA07070126"},{"t":"AC(17:0)","x":1202.2,"y":302.2,"w":85.0,"h":16.4,"cas":"LMFA07070067"},{"t":"AC(18:0)","x":1201.0,"y":322.7,"w":85.0,"h":16.4,"cas":"LMFA07070008"},{"t":"AC(18:0)-OH","x":1200.1,"y":341.2,"w":85.1,"h":15.8,"cas":"LMFA07070043"},{"t":"AC(18:1)","x":1297.1,"y":195.4,"w":85.0,"h":16.0,"cas":"LMFA07070063"},{"t":"AC(18:1)-OH","x":1298.4,"y":216.2,"w":85.0,"h":16.0,"cas":"LMFA07070025"},{"t":"AC(18:2)","x":1299.0,"y":236.4,"w":85.0,"h":16.0,"cas":"LMFA07070092"},{"t":"AC(18:3)","x":1297.7,"y":255.7,"w":85.0,"h":16.0,"cas":"LMFA07070112"},{"t":"AC(20:4)","x":1296.3,"y":277.5,"w":85.0,"h":16.0,"cas":"LMFA07070088"},{"t":"AC(22:5)","x":1293.2,"y":300.4,"w":85.0,"h":16.0,"cas":"LMFA07070061"},{"t":"AC(26:0)","x":1294.3,"y":321.5,"w":85.0,"h":16.0,"cas":"LMFA07070069"},{"t":"FA(14:0)","x":1606.7,"y":154.9,"w":117.9,"h":18.6,"cas":"LMFA01010014"},{"t":"FA(15:0)","x":1606.4,"y":179.3,"w":112.6,"h":17.2,"cas":"LMFA01010015"},{"t":"FA(16:0)","x":1606.5,"y":200.1,"w":112.4,"h":14.1,"cas":"LMFA01010016"},{"t":"FA(17:0)","x":1603.6,"y":220.2,"w":112.4,"h":15.3,"cas":"LMFA01010017"},{"t":"FA(17:1)","x":1606.1,"y":244.0,"w":117.4,"h":17.8,"cas":"LMFA01010017A"},{"t":"FA(18:0)","x":1607.4,"y":268.3,"w":117.4,"h":16.7,"cas":"LMFA01010018"},{"t":"FA(18:1)","x":1607.1,"y":289.6,"w":117.4,"h":18.5,"cas":"LMFA01010023"},{"t":"FA(18:2)","x":1608.0,"y":314.0,"w":117.4,"h":19.8,"cas":"LMFA01010019"},{"t":"FA(18:3)","x":1607.8,"y":336.7,"w":117.4,"h":18.9,"cas":"LMFA01010021"},{"t":"FA(20:2)","x":1607.5,"y":358.3,"w":117.4,"h":17.2,"cas":"LMFA01010027"},{"t":"FA(20:3)","x":1739.2,"y":153.7,"w":117.4,"h":17.2,"cas":"LMFA01010028"},{"t":"FA(20:4)","x":1739.3,"y":177.0,"w":117.4,"h":17.2,"cas":"LMFA01010020"},{"t":"FA(20:5)","x":1739.4,"y":199.3,"w":117.4,"h":17.2,"cas":"LMFA01010029"},{"t":"FA(22:4)","x":1739.5,"y":220.6,"w":117.4,"h":17.2,"cas":"LMFA01010030"},{"t":"FA(22:5)","x":1739.3,"y":242.0,"w":117.4,"h":17.2,"cas":"LMFA01010031"},{"t":"FA(22:6)","x":1739.8,"y":264.2,"w":117.4,"h":17.2,"cas":"LMFA01010022"},{"t":"CE(14:0)","x":924.7,"y":418.1,"w":85.6,"h":21.9,"cas":"LMST01010014"},{"t":"CE(15:0)","x":925.4,"y":444.7,"w":85.6,"h":21.9,"cas":"LMST01010015"},{"t":"CE(16:0)","x":923.4,"y":470.6,"w":85.6,"h":21.9,"cas":"LMST01010016"},{"t":"CE(16:1)","x":923.7,"y":496.9,"w":85.6,"h":21.9,"cas":"LMST01010017"},{"t":"CE(16:2)","x":923.7,"y":523.3,"w":85.6,"h":21.9,"cas":"LMST01010018"},{"t":"CE(17:0)","x":1018.3,"y":418.1,"w":85.6,"h":21.9,"cas":"LMST01010019"},{"t":"CE(17:1)","x":1018.8,"y":444.6,"w":85.6,"h":21.9,"cas":"LMST01010020"},{"t":"CE(18:0)","x":1017.4,"y":469.9,"w":85.6,"h":21.9,"cas":"LMST01010021"},{"t":"CE(18:1)","x":1017.7,"y":496.2,"w":85.6,"h":21.9,"cas":"LMST01010022"},{"t":"CE(18:2)","x":1015.4,"y":524.1,"w":85.6,"h":21.9,"cas":"LMST01010023"},{"t":"CE(18:3)","x":1108.4,"y":416.7,"w":85.6,"h":21.9,"cas":"LMST01010024"},{"t":"CE(20:0)","x":1108.7,"y":443.2,"w":85.6,"h":21.9,"cas":"LMST01010025"},{"t":"CE(20:1)","x":1107.4,"y":468.7,"w":85.6,"h":21.9,"cas":"LMST01010026"},{"t":"CE(20:2)","x":1109.1,"y":495.2,"w":85.6,"h":21.9,"cas":"LMST01010027"},{"t":"CE(20:3)","x":1107.0,"y":523.9,"w":85.6,"h":21.9,"cas":"LMST01010028"},{"t":"CE(20:4)","x":1200.0,"y":417.6,"w":85.6,"h":21.9,"cas":"LMST01010029"},{"t":"CE(20:5)","x":1198.8,"y":443.8,"w":85.6,"h":21.9,"cas":"LMST01010030"},{"t":"CE(22:0)","x":1199.3,"y":468.2,"w":85.6,"h":21.9,"cas":"LMST01010031"},{"t":"CE(22:1)","x":1198.2,"y":494.0,"w":85.6,"h":21.9,"cas":"LMST01010032"},{"t":"CE(22:4)","x":1198.1,"y":521.3,"w":80.2,"h":21.9,"cas":"LMST01010033"},{"t":"CE(22:5)","x":1293.1,"y":415.8,"w":85.6,"h":21.9,"cas":"LMST01010034"},{"t":"CE(22:6)","x":1293.7,"y":444.1,"w":85.6,"h":21.9,"cas":"LMST01010035"},{"t":"CE(24:0)","x":1293.2,"y":468.2,"w":85.6,"h":22.2,"cas":"LMST01010036"},{"t":"CE(24:1)","x":1291.9,"y":495.7,"w":85.6,"h":22.2,"cas":"LMST01010037"},{"t":"CE(24:4)","x":1292.3,"y":522.7,"w":85.6,"h":22.2,"cas":"LMST01010038"},{"t":"CE(24:5)","x":1383.2,"y":416.9,"w":85.6,"h":21.9,"cas":"LMST01010039"},{"t":"CE(24:6)","x":1383.7,"y":442.5,"w":85.6,"h":21.9,"cas":"LMST01010040"},{"t":"dhCer(18:0/16:0)","x":648.1,"y":838.8,"w":97.2,"h":26.5,"cas":"LMSP02020016"},{"t":"dhCer(18:0/20:0)","x":646.6,"y":868.4,"w":97.2,"h":26.5,"cas":"LMSP02020016"},{"t":"dhCer(18:0/20:0)","x":645.8,"y":896.5,"w":97.2,"h":26.5,"cas":"LMSP02020016"},{"t":"dhCer(18:0/22:0)","x":645.9,"y":926.5,"w":97.2,"h":26.5,"cas":"LMSP02020022"},{"t":"dhCer(18:0/24:0)","x":644.0,"y":957.3,"w":97.2,"h":26.3,"cas":"LMSP02020024"},{"t":"dhCer(18:0/24:1)","x":643.5,"y":986.7,"w":97.2,"h":26.3,"cas":"LMSP02020025"},{"t":"Cer(d18:0/16:0)","x":868.4,"y":898.3,"w":97.2,"h":26.5,"cas":"LMSP02010016"},{"t":"Cer(d18:0/18:0)","x":867.5,"y":930.9,"w":97.2,"h":26.5,"cas":"LMSP02010018"},{"t":"Cer(d18:0/20:0)","x":866.7,"y":962.9,"w":97.2,"h":26.5,"cas":"LMSP02010020"},{"t":"Cer(d18:0/24:0)","x":867.8,"y":995.2,"w":97.2,"h":26.5,"cas":"LMSP02010024"},{"t":"Cer(d18:0/24:1)","x":976.3,"y":898.6,"w":97.2,"h":26.5,"cas":"LMSP02010025"},{"t":"Cer(d18:0/26:1)","x":976.0,"y":933.1,"w":97.2,"h":24.6,"cas":"LMSP02010026"},{"t":"Cer(d18:2/16:0)","x":976.3,"y":962.1,"w":97.2,"h":26.5,"cas":"LMSP02010016"},{"t":"Cer(d18:2/18:0)","x":977.6,"y":995.2,"w":97.2,"h":26.5,"cas":"LMSP02010018"},{"t":"Cer(d18:2/20:0)","x":1079.6,"y":900.7,"w":97.2,"h":26.5,"cas":"LMSP02010020"},{"t":"Cer(d18:2/22:0)","x":1079.9,"y":931.2,"w":97.2,"h":26.5,"cas":"LMSP02010022"},{"t":"Cer(d18:2/24:0)","x":1082.1,"y":963.5,"w":97.2,"h":26.5,"cas":"LMSP02010024"},{"t":"Cer(d18:2/24:1)","x":1081.7,"y":993.9,"w":97.2,"h":26.5,"cas":"LMSP02010025"},{"t":"Cer(d18:2/26:0)","x":974.8,"y":1027.0,"w":97.2,"h":26.5,"cas":"LMSP02010026"},{"t":"Cer1p(d18:1/16:0)","x":1081.3,"y":1027.0,"w":97.2,"h":26.5,"cas":"LMSP03010016"},{"t":"GM3(d18:1/16:0)","x":1366.8,"y":646.9,"w":106.0,"h":21.3,"cas":"LMSP505020001"},{"t":"GM1(d18:1/16:0)","x":1366.6,"y":623.0,"w":106.0,"h":18.8,"cas":"LMSP505010001"},{"t":"GM3(d18:1/18:0)","x":1366.5,"y":670.2,"w":106.0,"h":18.8,"cas":"LMSP505020002"},{"t":"GM3(d18:1/20:0)","x":1366.4,"y":693.1,"w":106.0,"h":20.4,"cas":"LMSP505020003"},{"t":"GM3(d18:1/22:0)","x":1366.9,"y":717.6,"w":106.0,"h":21.6,"cas":"LMSP5050200004"},{"t":"GM3(d18:1/24:0)","x":1366.5,"y":742.6,"w":106.0,"h":19.4,"cas":"LMSP5050200005"},{"t":"GM3(d18:1/24:1)","x":1365.6,"y":768.9,"w":106.0,"h":22.4,"cas":"LMSP5050200006"},{"t":"Hex2Cer(d16:1/16:0)","x":872.5,"y":618.5,"w":106.0,"h":27.2,"cas":"LMSP505020016"},{"t":"Hex2Cer(d18:1/16:0)","x":873.2,"y":650.2,"w":106.0,"h":27.2,"cas":"LMSP505020017"},{"t":"Hex2Cer(d18:1/18:0)","x":870.5,"y":679.6,"w":106.0,"h":27.2,"cas":"LMSP505020018"},{"t":"Hex2Cer(d18:1/20:0)","x":872.3,"y":711.8,"w":106.0,"h":27.2,"cas":"LMSP505020020"},{"t":"Hex2Cer(d18:1/22:0)","x":871.8,"y":743.8,"w":106.0,"h":27.2,"cas":"LMSP505020022"},{"t":"Hex2Cer(d18:1/24:0)","x":871.8,"y":774.0,"w":106.0,"h":27.2,"cas":"LMSP505020024"},{"t":"Hex2Cer(d18:1/24:1)","x":871.4,"y":805.1,"w":106.0,"h":27.2,"cas":"LMSP505020025"},{"t":"Hex3Cer(d18:1/16:0)","x":992.0,"y":620.0,"w":106.0,"h":27.2,"cas":"LMSP505030016"},{"t":"Hex3Cer(d18:1/18:0)","x":991.8,"y":653.4,"w":106.0,"h":27.2,"cas":"LMSP505030018"},{"t":"Hex3Cer(d18:1/20:0)","x":989.0,"y":684.3,"w":106.0,"h":27.2,"cas":"LMSP505030020"},{"t":"Hex3Cer(d18:1/22:0)","x":989.0,"y":713.9,"w":106.0,"h":27.2,"cas":"LMSP505030022"},{"t":"Hex3Cer(d18:1/24:0)","x":989.4,"y":746.6,"w":106.0,"h":27.2,"cas":"LMSP505030024"},{"t":"Hex3Cer(d18:1/24:1)","x":989.2,"y":778.5,"w":106.0,"h":27.2,"cas":"LMSP505030025"},{"t":"HexCer(d18:1/16:0)","x":1110.6,"y":621.7,"w":106.0,"h":27.2,"cas":"LMSP505010016"},{"t":"HexCer(d18:1/18:0)","x":1109.8,"y":655.5,"w":106.0,"h":27.2,"cas":"LMSP505010018"},{"t":"HexCer(d18:1/20:0)","x":1110.1,"y":689.0,"w":106.0,"h":27.2,"cas":"LMSP505010020"},{"t":"HexCer(d18:1/22:0)","x":1110.5,"y":720.3,"w":105.8,"h":24.5,"cas":"LMSP505010022"},{"t":"HexCer(d18:1/24:0)","x":1109.2,"y":747.6,"w":105.8,"h":24.5,"cas":"LMSP505010024"},{"t":"HexCer(d18:1/24:1)","x":1108.8,"y":776.1,"w":105.8,"h":24.5,"cas":"LMSP505010025"},{"t":"SM(d18:1/16:0)","x":855.9,"y":1112.8,"w":106.0,"h":25.5,"cas":"LMSP03010001"},{"t":"SM(d18:1/18:0)","x":856.9,"y":1143.9,"w":106.0,"h":25.5,"cas":"LMSP03010002"},{"t":"SM(d18:1/22:0)","x":977.6,"y":1114.6,"w":106.0,"h":25.5,"cas":"LMSP03010003"},{"t":"SM(d18:1/24:0)","x":977.3,"y":1144.0,"w":106.0,"h":25.5,"cas":"LMSP03010004"},{"t":"DG(16:0/16:0)","x":1206.9,"y":1216.6,"w":97.7,"h":25.1,"cas":"LMGL02010003"},{"t":"DG(16:0/16:1)","x":1206.9,"y":1247.4,"w":99.0,"h":25.1,"cas":"LMGL02010004"},{"t":"DG(16:0/18:2)","x":1206.6,"y":1303.6,"w":98.4,"h":25.1,"cas":"LMGL02010006"},{"t":"DG(16:0/18:1)","x":1206.4,"y":1275.2,"w":99.0,"h":25.1,"cas":"LMGL02010005"},{"t":"DG(16:0/24:4)","x":1207.3,"y":1333.9,"w":98.4,"h":25.1,"cas":"LMGL02010007"},{"t":"DG(16:1/18:1)","x":1206.3,"y":1363.4,"w":98.4,"h":25.1,"cas":"LMGL02010008"},{"t":"DG(18:0/18:1)","x":1206.2,"y":1392.4,"w":98.4,"h":25.1,"cas":"LMGL02010009"},{"t":"DG(18:0/18:2)","x":1207.8,"y":1420.6,"w":98.4,"h":25.1,"cas":"LMGL02010010"},{"t":"DG(18:0/20:4)","x":1322.2,"y":1218.2,"w":98.4,"h":25.1,"cas":"LMGL02010011"},{"t":"DG(18:1/18:1)","x":1321.9,"y":1247.2,"w":98.4,"h":25.1,"cas":"LMGL02010012"},{"t":"DG(18:1/18:2)","x":1323.0,"y":1275.4,"w":98.4,"h":25.1,"cas":"LMGL02010013"},{"t":"DG(18:1/20:4)","x":1321.4,"y":1303.7,"w":98.4,"h":25.1,"cas":"LMGL02010014"},{"t":"DG(18:2/18:2)","x":1322.2,"y":1333.3,"w":98.4,"h":25.1,"cas":"LMGL02010015"},{"t":"DG(18:2/20:4)","x":1321.8,"y":1361.6,"w":98.4,"h":25.1,"cas":"LMGL02010016"},{"t":"LPC(14:0)","x":1902.9,"y":821.4,"w":78.0,"h":23.3,"cas":"LMGP01010014"},{"t":"LPC(15:0)","x":1903.1,"y":847.4,"w":78.0,"h":23.3,"cas":"LMGP01010015"},{"t":"LPC(16:0)","x":1903.0,"y":872.5,"w":78.0,"h":23.3,"cas":"LMGP01010016"},{"t":"LPC(16:1)","x":1901.7,"y":899.6,"w":76.8,"h":23.3,"cas":"LMGP01010017"},{"t":"LPC(17:0)","x":1901.6,"y":926.7,"w":78.0,"h":23.3,"cas":"LMGP01010017A"},{"t":"LPC(18:0)","x":1900.7,"y":952.5,"w":79.4,"h":23.3,"cas":"LMGP01010018"},{"t":"LPC(18:1)","x":1900.5,"y":978.5,"w":78.0,"h":23.3,"cas":"LMGP01010019"},{"t":"LPC(18:2)","x":1900.0,"y":1004.6,"w":78.0,"h":23.3,"cas":"LMGP01010020"},{"t":"LPC(18:3)","x":1899.9,"y":1029.6,"w":78.0,"h":23.3,"cas":"LMGP01010021"},{"t":"LPC(20:0)","x":1900.9,"y":1056.2,"w":78.0,"h":23.3,"cas":"LMGP01010022"},{"t":"LPC(20:1)","x":1986.4,"y":821.0,"w":78.0,"h":23.3,"cas":"LMGP01010023"},{"t":"LPC(20:3)","x":1985.1,"y":847.9,"w":78.0,"h":23.3,"cas":"LMGP01010024"},{"t":"LPC(20:4)","x":1985.4,"y":872.8,"w":78.0,"h":23.3,"cas":"LMGP01010025"},{"t":"LPC(20:5)","x":1984.9,"y":900.0,"w":78.0,"h":23.3,"cas":"LMGP01010026"},{"t":"LPC(22:0)","x":1984.8,"y":925.7,"w":78.0,"h":23.3,"cas":"LMGP01010027"},{"t":"LPC(22:1)","x":1984.8,"y":951.4,"w":78.0,"h":23.3,"cas":"LMGP01010028"},{"t":"LPC(22:4)","x":1984.0,"y":979.0,"w":78.0,"h":23.3,"cas":"LMGP01010029"},{"t":"LPC(22:5)","x":1985.2,"y":1004.5,"w":78.0,"h":23.3,"cas":"LMGP01010030"},{"t":"LPC(22:6)","x":1984.5,"y":1030.1,"w":78.0,"h":23.3,"cas":"LMGP01010031"},{"t":"LPC(24:0)","x":1984.4,"y":1056.5,"w":78.0,"h":23.3,"cas":"LMGP01010032"},{"t":"LPC(26:0)","x":1986.6,"y":1084.4,"w":78.0,"h":23.3,"cas":"LMGP01010033"},{"t":"PC(16:0/18:1)","x":1615.3,"y":984.6,"w":99.2,"h":26.1,"cas":"LMGP01050001"},{"t":"PC(16:0/22:6)","x":1615.6,"y":922.5,"w":99.2,"h":26.1,"cas":"LMGP010500022"},{"t":"PC(16:0/18:1)","x":1615.7,"y":953.6,"w":99.2,"h":26.1,"cas":"LMGP010500002"},{"t":"S1P(d16:1)","x":1343.3,"y":900.4,"w":95.7,"h":26.3,"cas":"LMSP05010016"},{"t":"S1P(d17:1)","x":1343.7,"y":932.1,"w":97.1,"h":26.3,"cas":"LMSP05010017"},{"t":"S1P(d18:0)","x":1343.3,"y":962.8,"w":97.1,"h":26.3,"cas":"LMSP05010018"},{"t":"S1P(d18:1)","x":1344.3,"y":991.6,"w":97.1,"h":26.3,"cas":"LMSP05010001"},{"t":"S1P(d18:2)","x":1343.1,"y":1020.2,"w":97.1,"h":26.3,"cas":"LMSP05010019"},{"t":"PA(34:1)","x":608.0,"y":1344.3,"w":78.0,"h":20.8,"cas":"LMGP10010013"},{"t":"PA(36:1)","x":608.9,"y":1369.3,"w":78.0,"h":20.8,"cas":"LMGP10010036A"},{"t":"PA(36:2)","x":607.9,"y":1393.3,"w":78.0,"h":20.8,"cas":"LMGP10010036B"},{"t":"PA(36:3)","x":607.8,"y":1417.3,"w":78.0,"h":21.0,"cas":"LMGP10010036C"},{"t":"PA(36:4)","x":607.9,"y":1441.5,"w":78.0,"h":21.0,"cas":"LMGP10010036D"},{"t":"PA(40:6)","x":607.7,"y":1465.6,"w":78.0,"h":21.0,"cas":"LMGP10010040"},{"t":"PG(34:1)","x":367.0,"y":1381.4,"w":78.0,"h":20.8,"cas":"LMGP04010034"},{"t":"PG(36:1)","x":366.3,"y":1410.1,"w":78.0,"h":20.8,"cas":"LMGP04010036A"},{"t":"PG(36:2)","x":366.8,"y":1436.3,"w":78.0,"h":20.8,"cas":"LMGP04010036B"},{"t":"LPI(18:0)","x":1023.4,"y":1423.2,"w":78.0,"h":20.8,"cas":"LMGP06010018"},{"t":"LPI(18:1)","x":1022.8,"y":1447.1,"w":78.0,"h":20.8,"cas":"LMGP06010019"},{"t":"LPI(18:2)","x":1023.2,"y":1471.7,"w":78.0,"h":20.8,"cas":"LMGP06010020"},{"t":"LPI(20:4)","x":1024.0,"y":1497.1,"w":78.0,"h":20.8,"cas":"LMGP06010021"},{"t":"LPE(16:0)","x":1794.0,"y":1519.9,"w":89.5,"h":25.1,"cas":"LMGP02030016"},{"t":"LPE(18:0)","x":1793.8,"y":1549.7,"w":89.5,"h":25.1,"cas":"LMGP02030018"},{"t":"LPE(18:1)","x":1792.9,"y":1578.0,"w":89.5,"h":25.1,"cas":"LMGP02030019"},{"t":"LPE(18:2)","x":1794.0,"y":1608.5,"w":89.5,"h":25.1,"cas":"LMGP02030020"},{"t":"LPE(20:4)","x":1793.7,"y":1638.3,"w":89.5,"h":25.1,"cas":"LMGP02030021"},{"t":"LPE(22:6)","x":1792.3,"y":1667.4,"w":89.5,"h":25.1,"cas":"LMGP02030022"},{"t":"LPE(P-16:0)","x":1793.1,"y":1695.9,"w":89.5,"h":25.1,"cas":"LMGP02040016"},{"t":"LPE(P-18:0)","x":1792.4,"y":1723.1,"w":89.5,"h":25.1,"cas":"LMGP02040018"},{"t":"LPE(P-18:1)","x":1792.9,"y":1753.8,"w":89.5,"h":25.1,"cas":"LMGP02040019"},{"t":"LPE(P-20:1)","x":1793.2,"y":1783.7,"w":89.5,"h":25.1,"cas":"LMGP02040020"},{"t":"LP(16:0/18:1)","x":1609.5,"y":1414.7,"w":89.5,"h":25.1,"cas":"LMGP02010001"},{"t":"LP(16:0/18:2)","x":1609.1,"y":1443.7,"w":89.5,"h":25.1,"cas":"LMGP02010002"},{"t":"LP(16:0/22:6)","x":1609.1,"y":1472.3,"w":89.5,"h":25.1,"cas":"LMGP02010022"},{"t":"LP(36:2)","x":1608.5,"y":1502.0,"w":89.5,"h":25.1,"cas":"LMGP02010036"},{"t":"LP(40:4)","x":1609.6,"y":1530.8,"w":89.5,"h":25.1,"cas":"LMGP02010040"},{"t":"LP(O-16:0/20:4)","x":1609.0,"y":1559.1,"w":89.5,"h":25.1,"cas":"LMGP02010020"},{"t":"LP(O-16:0/20:6)","x":1608.8,"y":1587.7,"w":89.5,"h":25.1,"cas":"LMGP02010022"},{"t":"LP(P-16:0/20:4)","x":1609.1,"y":1614.9,"w":89.5,"h":25.1,"cas":"LMGP02030020"},{"t":"LP(P-18:0/22:6)","x":1607.5,"y":1641.3,"w":89.0,"h":25.1,"cas":"LMGP02030022"},{"t":"PC(O-16:0/24:0)","x":1616.2,"y":894.0,"w":99.2,"h":26.1,"cas":"LMGP01060020"},{"t":"PC(O-18:0/24:0)","x":1615.6,"y":867.4,"w":99.2,"h":26.1,"cas":"LMGP01060021"},{"t":"PC(P-16:0/24:0)","x":1615.5,"y":834.4,"w":99.2,"h":26.1,"cas":"LMGP01070020"},{"t":"PC(P-18:0/24:0)","x":1617.3,"y":806.0,"w":99.2,"h":26.1,"cas":"LMGP01070021"},{"t":"PI(16:0/16:0)","x":823.2,"y":1369.9,"w":78.0,"h":20.8,"cas":"LMGP06010016"},{"t":"PI(16:0/16:1)","x":822.9,"y":1392.5,"w":78.0,"h":20.8,"cas":"LMGP06010017"},{"t":"PI(16:0/20:4)","x":822.3,"y":1415.4,"w":78.0,"h":20.8,"cas":"LMGP06010020"},{"t":"PI(18:0/18:1)","x":822.9,"y":1439.3,"w":78.0,"h":20.8,"cas":"LMGP06010018"},{"t":"PI(18:0/20:2)","x":823.4,"y":1462.3,"w":78.0,"h":20.8,"cas":"LMGP06010019"},{"t":"PI(18:0/20:3)","x":822.8,"y":1487.1,"w":78.0,"h":20.8,"cas":"LMGP06010020A"},{"t":"PI(18:0/20:4)","x":823.1,"y":1510.7,"w":78.0,"h":20.8,"cas":"LMGP06010020B"},{"t":"PI(18:0/22:5)","x":821.6,"y":1535.1,"w":78.0,"h":20.8,"cas":"LMGP06010022A"},{"t":"PI(18:0/22:6)","x":820.9,"y":1558.6,"w":78.0,"h":20.8,"cas":"LMGP06010022"},{"t":"PI(34:0)","x":820.2,"y":1582.6,"w":78.0,"h":20.8,"cas":"LMGP06010034"},{"t":"PI(34:1)","x":818.7,"y":1605.8,"w":78.0,"h":20.8,"cas":"LMGP06010034A"},{"t":"PI(36:2)","x":818.4,"y":1630.1,"w":78.0,"h":20.8,"cas":"LMGP06010036A"},{"t":"PI(36:3)","x":818.4,"y":1653.0,"w":78.0,"h":20.8,"cas":"LMGP06010036B"},{"t":"PI(37:4)","x":817.3,"y":1676.6,"w":78.0,"h":20.8,"cas":"LMGP06010037A"},{"t":"PI(37:6)","x":818.0,"y":1701.4,"w":78.0,"h":20.8,"cas":"LMGP06010037B"},{"t":"PI(38:5)","x":816.9,"y":1726.1,"w":78.0,"h":20.8,"cas":"LMGP06010038A"},{"t":"PI(39:6)","x":817.2,"y":1750.2,"w":78.0,"h":20.8,"cas":"LMGP06010039"},{"t":"PI(40:4)","x":816.9,"y":1774.9,"w":78.0,"h":20.8,"cas":"LMGP06010040"},{"t":"PIP(38:4)","x":816.2,"y":1799.8,"w":78.0,"h":20.8,"cas":"LMGP06020001"},{"t":"PS(36:1)","x":1819.1,"y":1225.8,"w":78.0,"h":23.3,"cas":"LMGP07010036A"},{"t":"PS(36:2)","x":1818.2,"y":1256.4,"w":78.0,"h":23.3,"cas":"LMGP07010036B"},{"t":"PS(38:4)","x":1817.8,"y":1285.9,"w":78.0,"h":23.3,"cas":"LMGP07010038"},{"t":"PS(40:6)","x":1817.2,"y":1317.0,"w":78.0,"h":23.3,"cas":"LMGP07010040"},{"t":"TG(48:0)","x":1595.2,"y":486.5,"w":99.2,"h":26.1,"cas":"LMGL02010480"},{"t":"TG(48:1)","x":1594.9,"y":521.9,"w":99.2,"h":26.1,"cas":"LMGL02010481"},{"t":"TG(48:2)","x":1596.1,"y":557.6,"w":99.2,"h":26.1,"cas":"LMGL02010482"},{"t":"TG(48:3)","x":1596.2,"y":589.1,"w":99.2,"h":26.1,"cas":"LMGL02010483"},{"t":"TG(49:1)","x":1598.1,"y":623.4,"w":99.2,"h":26.1,"cas":"LMGL02010491"},{"t":"TG(50:0)","x":1703.0,"y":486.5,"w":99.2,"h":26.1,"cas":"LMGL02010500"},{"t":"TG(50:1)","x":1703.3,"y":520.9,"w":99.2,"h":26.1,"cas":"LMGL02010501"},{"t":"TG(50:2)","x":1701.6,"y":555.1,"w":99.2,"h":26.1,"cas":"LMGL02010502"},{"t":"TG(50:3)","x":1702.4,"y":587.1,"w":99.2,"h":26.1,"cas":"LMGL02010503"},{"t":"TG(50:4)","x":1701.9,"y":621.8,"w":99.2,"h":26.1,"cas":"LMGL02010504"},{"t":"TG(51:0)","x":1812.9,"y":486.5,"w":99.2,"h":26.1,"cas":"LMGL02010510"},{"t":"TG(51:1)","x":1811.0,"y":521.6,"w":99.2,"h":26.1,"cas":"LMGL02010511"},{"t":"TG(51:2)","x":1810.1,"y":553.5,"w":99.2,"h":26.1,"cas":"LMGL02010512"},{"t":"TG(52:1)","x":1811.7,"y":585.1,"w":99.2,"h":26.1,"cas":"LMGL02010521"},{"t":"TG(52:2)","x":1811.1,"y":621.8,"w":99.2,"h":26.1,"cas":"LMGL02010522"},{"t":"TG(52:3)","x":1925.5,"y":487.4,"w":99.2,"h":26.1,"cas":"LMGL02010523"},{"t":"TG(52:4)","x":1924.7,"y":520.9,"w":99.2,"h":26.1,"cas":"LMGL02010524"},{"t":"TG(52:5)","x":1923.7,"y":554.4,"w":99.2,"h":26.1,"cas":"LMGL02010525"},{"t":"TG(53:2)","x":1923.9,"y":587.1,"w":99.2,"h":26.1,"cas":"LMGL02010532"},{"t":"TG(54:0)","x":1921.9,"y":620.9,"w":99.2,"h":26.1,"cas":"LMGL02010540"},{"t":"TG(54:1)","x":2032.9,"y":486.0,"w":99.2,"h":26.1,"cas":"LMGL02010541"},{"t":"TG(54:2)","x":2030.6,"y":517.5,"w":99.2,"h":26.1,"cas":"LMGL02010542"},{"t":"TG(54:3)","x":2030.5,"y":551.9,"w":99.2,"h":26.1,"cas":"LMGL02010543"},{"t":"TG(54:4)","x":2031.0,"y":584.8,"w":99.2,"h":26.1,"cas":"LMGL02010544"},{"t":"TG(54:5)","x":2030.7,"y":617.0,"w":99.2,"h":26.1,"cas":"LMGL02010545"},{"t":"TG(54:6)","x":2139.2,"y":486.4,"w":99.2,"h":26.1,"cas":"LMGL02010546"},{"t":"TG(54:7)","x":2138.6,"y":517.3,"w":99.2,"h":26.1,"cas":"LMGL02010547"},{"t":"TG(56:6)","x":2138.3,"y":548.3,"w":99.2,"h":26.1,"cas":"LMGL02010566"},{"t":"TG(56:7)","x":2136.1,"y":583.5,"w":99.2,"h":26.1,"cas":"LMGL02010567"},{"t":"TG(56:8)","x":2138.1,"y":616.6,"w":99.2,"h":26.1,"cas":"LMGL02010568"},{"t":"TG(56:9)","x":1593.9,"y":658.9,"w":99.2,"h":26.1,"cas":"LMGL02010569"},{"t":"TG(58:10)","x":1702.7,"y":658.4,"w":99.2,"h":26.1,"cas":"LMGL020105810"},{"t":"TG(58:8)","x":1810.6,"y":655.6,"w":99.2,"h":26.1,"cas":"LMGL02010588"},{"t":"TG(58:9)","x":1921.5,"y":655.2,"w":99.2,"h":26.1,"cas":"LMGL02010589"},{"t":"SHexCer(d18:1/16:0)","x":1238.8,"y":634.4,"w":106.0,"h":27.2,"cas":"LMSP505020001"},{"t":"SHexCer(d18:1/24:0)","x":1239.0,"y":669.4,"w":106.0,"h":27.2,"cas":"LMSP505020002"},{"t":"SHexCer(d18:1/24:1)","x":1237.8,"y":700.2,"w":106.0,"h":27.2,"cas":"LMSP505020003"},{"t":"Sph(d16:1)","x":1217.2,"y":901.0,"w":97.2,"h":26.5,"cas":"LMSP01010016"},{"t":"Sph(d18:1)","x":1217.3,"y":934.5,"w":97.2,"h":26.5,"cas":"LMSP01010001"},{"t":"Sph(d18:2)","x":1216.4,"y":969.9,"w":97.2,"h":26.5,"cas":"LMSP01010019"},{"t":"dxCA","x":850.4,"y":380.6,"w":76.5,"h":21.2,"cas":"LMST04010040"},{"t":"COH","x":1884.6,"y":156.9,"w":101.3,"h":21.5,"cas":"LMST01010001"},{"t":"Ubiquinone","x":1887.1,"y":187.4,"w":101.3,"h":21.5,"cas":"LMPR01010010"},{"t":"LPCO(O-16:0)","x":2070.9,"y":823.8,"w":78.0,"h":23.3,"cas":"LMGP01030016"},{"t":"LPCP(O-16:0)","x":2157.1,"y":822.2,"w":78.0,"h":23.3,"cas":"LMGP01040016"},{"t":"LPCP(O-18:0)","x":2157.3,"y":850.6,"w":78.0,"h":23.3,"cas":"LMGP01040018"},{"t":"LPCP(O-20:0)","x":2158.2,"y":878.4,"w":78.0,"h":23.3,"cas":"LMGP01040020"},{"t":"LPCO(O-18:0)","x":2070.0,"y":850.3,"w":78.0,"h":23.3,"cas":"LMGP01030018"},{"t":"LPCO(O-18:1)","x":2070.3,"y":878.1,"w":78.0,"h":23.3,"cas":"LMGP01030019"},{"t":"LPCO(O-20:0)","x":2069.9,"y":904.0,"w":78.0,"h":23.3,"cas":"LMGP01030020"},{"t":"LPCO(O-20:1)","x":2070.1,"y":929.4,"w":78.0,"h":23.3,"cas":"LMGP01030021"},{"t":"LPCO(O-22:0)","x":2069.3,"y":956.3,"w":78.0,"h":23.3,"cas":"LMGP01030022"},{"t":"LPCO(O-22:1)","x":2067.1,"y":982.3,"w":78.0,"h":23.3,"cas":"LMGP01030023"},{"t":"LPCO(O-24:0)","x":2067.5,"y":1009.6,"w":78.0,"h":23.3,"cas":"LMGP01030024"},{"t":"LPCO(O-24:1)","x":2068.1,"y":1035.3,"w":78.0,"h":23.3,"cas":"LMGP01030025"}],"ixns":[{"c":"#000000","p":[{"x":702.0,"y":798.0,"a":""},{"x":754.2,"y":848.0,"a":"Arrow"}]},{"c":"#000000","p":[{"x":56.2,"y":245.6,"a":""},{"x":51.8,"y":1173.1,"a":""}]},{"c":"#000000","p":[{"x":223.0,"y":247.0,"a":""},{"x":59.0,"y":246.0,"a":""}]},{"c":"#000000","p":[{"x":471.2,"y":1020.7,"a":""},{"x":608.1,"y":1165.2,"a":"Arrow"}]},{"c":"#000000","p":[{"x":317.1,"y":644.0,"a":""},{"x":437.4,"y":644.8,"a":"Arrow"}]},{"c":"#000000","p":[{"x":473.5,"y":818.1,"a":""},{"x":473.6,"y":877.0,"a":"Arrow"}]},{"c":"#000000","p":[{"x":513.5,"y":797.1,"a":""},{"x":596.0,"y":798.0,"a":"Arrow"}]},{"c":"#000000","p":[{"x":1513.5,"y":1177.3,"a":""},{"x":1564.8,"y":1037.7,"a":"Arrow"}]},{"c":"#000000","p":[{"x":861.2,"y":578.2,"a":""},{"x":1234.8,"y":579.3,"a":"Arrow"}]},{"c":"#000000","p":[{"x":280.0,"y":375.0,"a":""},{"x":336.1,"y":476.8,"a":"Arrow"}]},{"c":"#000000","p":[{"x":336.1,"y":518.8,"a":""},{"x":196.4,"y":614.5,"a":"Arrow"}]},{"c":"#000000","p":[{"x":517.4,"y":644.8,"a":""},{"x":590.9,"y":645.3,"a":"Arrow"}]},{"c":"#000000","p":[{"x":844.9,"y":211.2,"a":""},{"x":535.0,"y":213.6,"a":"Arrow"}]},{"c":"#000000","p":[{"x":1664.1,"y":1037.7,"a":""},{"x":1861.6,"y":783.6,"a":"Arrow"}]},{"c":"#000000","p":[{"x":482.0,"y":234.6,"a":""},{"x":483.0,"y":278.0,"a":"Arrow"}]},{"c":"#000000","p":[{"x":1655.1,"y":1373.9,"a":""},{"x":1752.9,"y":1479.1,"a":"Arrow"}]},{"c":"#000000","p":[{"x":285.0,"y":170.0,"a":""},{"x":285.0,"y":229.0,"a":"Arrow"}]},{"c":"#000000","p":[{"x":731.2,"y":389.0,"a":""},{"x":731.2,"y":459.6,"a":"Arrow"}]},{"c":"#000000","p":[{"x":1079.7,"y":848.5,"a":""},{"x":1297.5,"y":847.9,"a":"Arrow"}]},{"c":"#000000","p":[{"x":1474.5,"y":1208.8,"a":""},{"x":1577.1,"y":1373.9,"a":"Arrow"}]},{"c":"#000000","p":[{"x":1805.8,"y":1181.4,"a":""},{"x":1910.2,"y":1182.5,"a":"Arrow"}]},{"c":"#000000","p":[{"x":608.1,"y":1207.2,"a":""},{"x":606.6,"y":1282.0,"a":"Arrow"}]},{"c":"#000000","p":[{"x":1377.9,"y":125.1,"a":""},{"x":949.1,"y":215.3,"a":"Arrow"}]},{"c":"#000000","p":[{"x":567.6,"y":1303.0,"a":""},{"x":367.0,"y":1319.2,"a":"Arrow"}]},{"c":"#000000","p":[{"x":860.2,"y":848.0,"a":""},{"x":973.7,"y":848.5,"a":"Arrow"}]},{"c":"#000000","p":[{"x":807.2,"y":869.0,"a":""},{"x":807.9,"y":1036.9,"a":"Arrow"}]},{"c":"#000000","p":[{"x":647.1,"y":1186.2,"a":""},{"x":1435.5,"y":1187.8,"a":"Arrow"}]},{"c":"#000000","p":[{"x":328.0,"y":1340.2,"a":""},{"x":165.6,"y":1388.7,"a":"Arrow"}]},{"c":"#000000","p":[{"x":282.0,"y":269.0,"a":""},{"x":281.0,"y":333.0,"a":"Arrow"}]},{"c":"#000000","p":[{"x":645.6,"y":1303.0,"a":""},{"x":784.6,"y":1334.6,"a":"Arrow"}]},{"c":"#000000","p":[{"x":1639.3,"y":1067.9,"a":""},{"x":1766.8,"y":1160.4,"a":"Arrow"}]},{"c":"#000000","p":[{"x":271.1,"y":1174.8,"a":""},{"x":531.1,"y":1087.3,"a":"Arrow"}]},{"c":"#000000","p":[{"x":1635.6,"y":1352.9,"a":""},{"x":1766.8,"y":1202.4,"a":"Arrow"}]},{"c":"#000000","p":[{"x":807.2,"y":827.0,"a":""},{"x":808.2,"y":599.2,"a":"Arrow"}]},{"c":"#000000","p":[{"x":473.6,"y":919.0,"a":""},{"x":471.2,"y":978.7,"a":"Arrow"}]},{"c":"#000000","p":[{"x":1616.1,"y":1352.9,"a":""},{"x":1614.4,"y":1067.9,"a":"Arrow"}]},{"c":"#000000","p":[{"x":483.0,"y":320.0,"a":""},{"x":482.5,"y":353.0,"a":"Arrow"}]},{"c":"#000000","p":[{"x":1479.1,"y":542.8,"a":""},{"x":1446.5,"y":192.5,"a":"Arrow"}]},{"c":"#000000","p":[{"x":477.4,"y":665.8,"a":""},{"x":473.5,"y":776.1,"a":"Arrow"}]},{"c":"#000000","p":[{"x":643.9,"y":624.3,"a":""},{"x":642.0,"y":482.0,"a":"Arrow"}]},{"c":"#000000","p":[{"x":50.3,"y":1174.6,"a":""},{"x":147.1,"y":1174.8,"a":""}]},{"c":"#000000","p":[{"x":862.6,"y":1334.6,"a":""},{"x":984.3,"y":1387.7,"a":"Arrow"}]},{"c":"#000000","p":[{"x":461.3,"y":396.6,"a":""},{"x":356.1,"y":476.8,"a":"Arrow"}]},{"c":"#000000","p":[{"x":695.0,"y":461.0,"a":""},{"x":767.1,"y":459.0,"a":"Arrow"}]},{"c":"#000000","p":[{"x":1474.5,"y":1166.8,"a":""},{"x":1479.1,"y":584.8,"a":"Arrow"}]}],"shapes":[{"s":"Oval","x":1446.5,"y":125.1,"w":137.2,"h":134.8,"f":"#ffffff","c":"#000000"},{"s":"Oval","x":196.4,"y":688.7,"w":166.5,"h":148.5,"f":"#ffffff","c":"#000000"}],"labels":[{"t":"Glycoysis","x":292.1,"y":64.5,"w":152.4,"h":37.2,"sz":24.0,"b":true},{"t":"(high glucose Conditions)","x":291.1,"y":100.4,"w":255.0,"h":29.9,"sz":20.0,"b":false},{"t":"Lipid droplets","x":1450.8,"y":118.8,"w":147.7,"h":48.7,"sz":18.0,"b":false},{"t":"(low glucos conditions)","x":889.5,"y":104.6,"w":259.4,"h":30.4,"sz":20.0,"b":false},{"t":"Fatty acid beta-oxidation ","x":892.6,"y":67.9,"w":297.6,"h":47.0,"sz":24.0,"b":true},{"t":"elongation/ desaturation","x":333.5,"y":940.8,"w":137.5,"h":53.2,"sz":20.0,"b":false}]}};
 
-const PATHWAY_NODES={
-  'citric acid':[620,430,'TCA Cycle'],'isocitric acid':[700,400,'TCA Cycle'],
-  'alpha-ketoglutaric acid':[760,450,'TCA Cycle'],'alpha-kg':[760,450,'TCA Cycle'],
-  'succinic acid':[730,560,'TCA Cycle'],'fumaric acid':[640,590,'TCA Cycle'],
-  'malic acid':[560,570,'TCA Cycle'],'oxaloacetic acid':[530,480,'TCA Cycle'],'oaa':[530,480,'TCA Cycle'],
-  'cis-aconitic acid':[680,415,'TCA Cycle'],
-  'glucose-6-phosphate':[310,310,'Glycolysis/PPP'],'g6p':[310,310,'Glycolysis/PPP'],
-  'fructose-6-phosphate':[310,360,'Glycolysis'],'glucose-1-phosphate':[255,310,'Glycolysis'],
-  'phosphoenolpyruvic acid':[310,450,'Glycolysis'],'pep':[310,450,'Glycolysis'],
-  'pyruvic acid':[310,510,'Glycolysis'],'pyruvate':[310,510,'Glycolysis'],
-  'lactic acid':[225,545,'Glycolysis'],'lactate':[225,545,'Glycolysis'],
-  '2-phosphoglyceric acid':[310,420,'Glycolysis'],'3-phosphoglyceric acid':[310,390,'Glycolysis'],
-  'ribose-5-phosphate':[460,200,'PPP'],'r5p':[460,200,'PPP'],
-  'ribulose-5-phosphate':[530,185,'PPP'],'ru5p':[530,185,'PPP'],
-  'erythrose-4-phosphate':[420,260,'PPP'],'e4p':[420,260,'PPP'],
-  '6-phosphogluconic acid':[370,235,'PPP'],'6-pgl':[370,235,'PPP'],
-  'sedoheptulose-7-phosphate':[490,240,'PPP'],'s7p':[490,240,'PPP'],
-  'amp':[650,150,'Purine Metabolism'],'adenosine monophosphate':[650,150,'Purine Metabolism'],
-  'adp':[620,115,'Purine Metabolism'],'adenosine diphosphate':[620,115,'Purine Metabolism'],
-  'atp':[590,80,'Purine Metabolism'],
-  'gmp':[720,155,'Purine Metabolism'],'guanosine monophosphate':[720,155,'Purine Metabolism'],
-  'gdp':[790,130,'Purine Metabolism'],'guanosine diphosphate':[790,130,'Purine Metabolism'],
-  'imp':[680,195,'Purine Metabolism'],'inosine monophosphate':[680,195,'Purine Metabolism'],
-  'idp':[740,210,'Purine Metabolism'],'inosine diphosphate':[740,210,'Purine Metabolism'],
-  'camp':[800,115,'Purine Metabolism'],'adenosine 3,5-cyclic monophosphate':[800,115,'Purine Metabolism'],
-  'adenosine':[590,130,'Purine Metabolism'],'inosine':[640,225,'Purine Metabolism'],
-  'xanthine':[820,200,'Purine Metabolism'],'hypoxanthine':[780,235,'Purine Metabolism'],
-  'guanosine':[770,175,'Purine Metabolism'],'xanthosine':[840,165,'Purine Metabolism'],
-  'cytidine':[160,175,'Pyrimidine Met.'],'uridine':[240,165,'Pyrimidine Met.'],
-  'thymidine':[155,230,'Pyrimidine Met.'],
-  'cdp-choline':[115,300,'Choline Met.'],'cytidine diphosphate choline':[115,300,'Choline Met.'],
-  'choline':[110,360,'Choline Met.'],
-  'alanine':[340,560,'Amino Acids'],'ala':[340,560,'Amino Acids'],
-  'arginine':[890,560,'Urea Cycle'],'arg':[890,560,'Urea Cycle'],
-  'ornithine':[870,510,'Urea Cycle'],'citrulline':[930,530,'Urea Cycle'],
-  'asparagine':[510,445,'Amino Acids'],'asn':[510,445,'Amino Acids'],
-  'aspartic acid':[510,410,'Amino Acids'],'asp':[510,410,'Amino Acids'],'aspartate':[510,410,'Amino Acids'],
-  'glutamine':[780,510,'Amino Acids'],'gln':[780,510,'Amino Acids'],
-  'glutamic acid':[800,465,'Amino Acids'],'glu':[800,465,'Amino Acids'],'glutamate':[800,465,'Amino Acids'],
-  'glycine':[405,620,'Amino Acids'],'gly':[405,620,'Amino Acids'],
-  'serine':[365,600,'Amino Acids'],'ser':[365,600,'Amino Acids'],
-  'threonine':[440,600,'Amino Acids'],'thr':[440,600,'Amino Acids'],
-  'tryptophan':[155,360,'Amino Acids'],'trp':[155,360,'Amino Acids'],
-  'tyrosine':[195,410,'Amino Acids'],'tyr':[195,410,'Amino Acids'],
-  'phenylalanine':[160,445,'Amino Acids'],'phe':[160,445,'Amino Acids'],
-  'proline':[850,610,'Amino Acids'],'pro':[850,610,'Amino Acids'],
-  'histidine':[820,270,'Amino Acids'],'his':[820,270,'Amino Acids'],
-  'valine':[945,360,'Amino Acids'],'val':[945,360,'Amino Acids'],
-  'leucine':[970,400,'Amino Acids'],'leu':[970,400,'Amino Acids'],
-  'isoleucine':[960,440,'Amino Acids'],'ile':[960,440,'Amino Acids'],
-  'lysine':[470,660,'Amino Acids'],'lys':[470,660,'Amino Acids'],
-  'methionine':[215,490,'Amino Acids'],'met':[215,490,'Amino Acids'],
-  'cysteine':[200,535,'Amino Acids'],'cys':[200,535,'Amino Acids'],
-  'gamma-aminobutyric acid':[840,510,'Amino Acids'],'gaba':[840,510,'Amino Acids'],
-  'nicotinamide':[100,345,'Choline Met.'],'nicotinic acid':[100,390,'Choline Met.'],
-  'acetyl-coa':[480,490,'TCA Cycle'],'acetylcarnitine':[430,520,'TCA Cycle'],
-};
+// ─── GPML rendering helpers ──────────────────────────────────────────────
+function normCmpName(s){return String(s).toLowerCase().trim().replace(/[^a-z0-9]/g,'');}
 
-function fcToColor(fc,maxFC){
-  if(maxFC===0)return'#e2e8f0';
-  const t=Math.max(-1,Math.min(1,fc/maxFC));
-  if(t>0){const g=Math.round(38+180*(1-t)),b=Math.round(38+180*(1-t));return`rgb(220,${Math.max(38,g)},${Math.max(38,b)})`;}
-  else{const u=-t,r=Math.round(37+180*(1-u)),g=Math.round(99+150*(1-u));return`rgb(${Math.max(37,r)},${Math.max(99,g)},235)`;}
+function buildFcMap(processed, results, grpA, grpB, fdrThresh){
+  const fcMap = {};
+  const grps = processed.groups, mat = processed.mat;
+  const allCmps = processed.compounds;
+  if(grpA && grpB && grpA !== grpB){
+    const idxA=grps.map((g,i)=>g===grpA?i:-1).filter(i=>i>=0);
+    const idxB=grps.map((g,i)=>g===grpB?i:-1).filter(i=>i>=0);
+    allCmps.forEach((cmp,fi)=>{
+      const vA=idxA.map(i=>mat[i][fi]),vB=idxB.map(i=>mat[i][fi]);
+      const fc=mean(vB)-mean(vA), pv=Math.max(1e-300,welchTTest(vA,vB));
+      fcMap[normCmpName(cmp.name)]={fc,pvalue:pv,fdr:pv,sig:false,name:cmp.name,cas:cmp.cas||''};
+    });
+    const sorted=Object.values(fcMap).sort((a,b)=>a.pvalue-b.pvalue);
+    const m=sorted.length;
+    sorted.forEach((v,i)=>{v.fdr=Math.min(1,v.pvalue*m/(i+1));});
+    for(let i=m-2;i>=0;i--) sorted[i].fdr=Math.min(sorted[i].fdr,sorted[i+1].fdr);
+    Object.values(fcMap).forEach(v=>{v.sig=v.fdr<fdrThresh;});
+  } else if(results){
+    results.forEach(r=>{
+      fcMap[normCmpName(r.name)]={fc:r.fc,pvalue:r.pvalue,fdr:r.fdr,sig:r.fdr<fdrThresh,name:r.name,cas:r.cas||''};
+    });
+  }
+  return fcMap;
+}
+
+function matchNodeToFcMap(nodeText, nodeCas, fcMap){
+  const nk = normCmpName(nodeText);
+  const cas = nodeCas||'';
+  if(cas){
+    for(const v of Object.values(fcMap)){if(v.cas&&v.cas===cas) return v;}
+  }
+  if(fcMap[nk]) return fcMap[nk];
+  if(nk.length>=4){
+    for(const [k,v] of Object.entries(fcMap)){
+      if(k.length>=4&&(k.includes(nk)||nk.includes(k))) return v;
+    }
+  }
+  return null;
+}
+
+// ── overlap resolution: push overlapping nodes apart iteratively ──────────
+function resolveOverlaps(positions, iterations) {
+  const iters = iterations || 60;
+  const PAD = 3;
+  for (let iter = 0; iter < iters; iter++) {
+    let moved = false;
+    for (let i = 0; i < positions.length; i++) {
+      for (let j = i + 1; j < positions.length; j++) {
+        const a = positions[i], b = positions[j];
+        const ox = (a.w + b.w) / 2 + PAD - Math.abs(a.x - b.x);
+        const oy = (a.h + b.h) / 2 + PAD - Math.abs(a.y - b.y);
+        if (ox > 0 && oy > 0) {
+          if (ox <= oy) {
+            const d = (ox + 1) / 2;
+            if (a.x <= b.x) { a.x -= d; b.x += d; } else { a.x += d; b.x -= d; }
+          } else {
+            const d = (oy + 1) / 2;
+            if (a.y <= b.y) { a.y -= d; b.y += d; } else { a.y += d; b.y -= d; }
+          }
+          moved = true;
+        }
+      }
+    }
+    if (!moved) break;
+  }
+}
+
+// ── RYG colour: yellow=no-change, red=up, green=down ─────────────────────
+function rygFill(fc, maxFC) {
+  if (!isFinite(fc) || fc === 0) return { fill:'#fef9c3', stroke:'#ca8a04', text:'#78350f' };
+  const t = Math.min(1, Math.abs(fc) / maxFC);
+  let r, g, b;
+  if (fc > 0) {
+    r = Math.round(251 + (220 - 251) * t);
+    g = Math.round(191 + (38  - 191) * t);
+    b = Math.round(36  + (38  -  36) * t);
+  } else {
+    r = Math.round(251 + (22  - 251) * t);
+    g = Math.round(191 + (163 - 191) * t);
+    b = Math.round(36  + (74  -  36) * t);
+  }
+  const text = t > 0.45 ? '#fff' : (fc > 0 ? '#7f1d1d' : '#14532d');
+  return {
+    fill: `rgb(${r},${g},${b})`,
+    stroke: `rgb(${Math.round(r*0.72)},${Math.round(g*0.72)},${Math.round(b*0.72)})`,
+    text
+  };
+}
+
+// ── main pathway renderer ─────────────────────────────────────────────────
+function renderGPMLPathway(gpmlKey, svgId, containerId, alertId, legendId, hitListId, grpAVal, grpBVal, fdrThresh, processed, results, opts) {
+  opts = opts || {};
+  const showMode = opts.showMode || 'all';
+  const fcThresh = opts.fcThresh !== undefined ? parseFloat(opts.fcThresh) : 0;
+
+  const alertEl = document.getElementById(alertId);
+  if (!PATHWAY_DATA || !PATHWAY_DATA[gpmlKey]) {
+    if (alertEl) alertEl.innerHTML = '<div class="alert alert-warning">Pathway data not available.</div>'; return;
+  }
+  if (!processed || !results) {
+    if (alertEl) alertEl.innerHTML = '<div class="alert alert-warning">Please run analysis first.</div>'; return;
+  }
+  if (alertEl) alertEl.innerHTML = '';
+
+  const pw   = PATHWAY_DATA[gpmlKey];
+  const SVGW = 1100;
+  const SVGH = Math.round(SVGW * pw.bh / pw.bw);
+  const sx   = SVGW / pw.bw, sy = SVGH / pw.bh;
+  const F    = 'Arial,sans-serif';
+
+  const fcMap  = buildFcMap(processed, results, grpAVal, grpBVal, fdrThresh);
+  const allFC  = Object.values(fcMap).map(s => Math.abs(s.fc)).filter(v => isFinite(v) && v > 0);
+  const maxFC  = allFC.length ? Math.max(...allFC) : 2;
+
+  const nodeStats = pw.nodes.map(n => ({...n, stat: matchNodeToFcMap(n.t, n.cas, fcMap)}));
+  const mapped    = nodeStats.filter(n => n.stat);
+  const unmapped  = nodeStats.filter(n => !n.stat);
+
+  // Scale node positions then resolve overlaps
+  const scaledPos = nodeStats.map(n => ({
+    x: n.x * sx,
+    y: n.y * sy,
+    w: Math.max(46, n.w * sx),
+    h: Math.max(15, n.h * sy)
+  }));
+  resolveOverlaps(scaledPos, 60);
+
+  const uCols = 10, uRows = Math.ceil(unmapped.length / uCols);
+  const UNMAPPED_H = uRows > 0 ? uRows * 34 + 64 : 0;
+  const H = SVGH + UNMAPPED_H;
+  const gk = gpmlKey;
+
+  let svg = `<svg id="${svgId}" viewBox="0 0 ${SVGW} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;display:block;background:#eef3fa;font-family:${F}">`;
+  svg += `<defs>
+    <pattern id="cgrid${gk}" width="25" height="25" patternUnits="userSpaceOnUse">
+      <path d="M 25 0 L 0 0 0 25" fill="none" stroke="#c8d8ec" stroke-width="0.4"/>
+    </pattern>
+    <marker id="arr${gk}" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+      <path d="M0,0 L6,3 L0,6 Z" fill="#555"/>
+    </marker>
+    <linearGradient id="rygGrad${gk}" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"   stop-color="rgb(22,163,74)"/>
+      <stop offset="50%"  stop-color="rgb(251,191,36)"/>
+      <stop offset="100%" stop-color="rgb(220,38,38)"/>
+    </linearGradient>
+  </defs>
+  <rect width="${SVGW}" height="${H}" fill="url(#cgrid${gk})"/>
+  <rect width="${SVGW}" height="${SVGH}" fill="#eef3fa" opacity="0.55"/>`;
+
+  const grpBLabel = grpBVal || 'Case', grpALabel = grpAVal || 'Control';
+  svg += `<text x="${SVGW/2}" y="20" text-anchor="middle" font-size="13" font-weight="bold" fill="#1a3a5c">${pw.name} — ${grpBLabel} vs ${grpALabel} (Log₂ FC)</text>`;
+
+  pw.shapes.forEach(s => {
+    const rx = s.x*sx, ry = s.y*sy, rw = s.w*sx, rh = s.h*sy;
+    if (s.s === 'Oval') {
+      svg += `<ellipse cx="${(rx+rw/2).toFixed(1)}" cy="${(ry+rh/2).toFixed(1)}" rx="${(rw/2).toFixed(1)}" ry="${(rh/2).toFixed(1)}" fill="${s.f}" fill-opacity="0.3" stroke="${s.c}" stroke-width="1"/>`;
+    } else {
+      svg += `<rect x="${rx.toFixed(1)}" y="${ry.toFixed(1)}" width="${rw.toFixed(1)}" height="${rh.toFixed(1)}" fill="${s.f}" fill-opacity="0.3" stroke="${s.c}" stroke-width="1" rx="4"/>`;
+    }
+  });
+
+  pw.labels.forEach(lb => {
+    const lx = (lb.x + lb.w/2)*sx, ly = lb.y*sy + 10;
+    svg += `<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="middle" font-size="${Math.max(8, Math.round(lb.sz*sx*0.45))}" font-weight="${lb.b?'bold':'normal'}" fill="#1e3a5c" opacity="0.7">${lb.t.trim()}</text>`;
+  });
+
+  pw.ixns.forEach(ix => {
+    if (ix.p.length < 2) return;
+    const pts = ix.p.map(p => `${(p.x*sx).toFixed(1)},${(p.y*sy).toFixed(1)}`).join(' ');
+    svg += `<polyline points="${pts}" fill="none" stroke="${ix.c||'#888'}" stroke-width="1.5" stroke-opacity="0.55" marker-end="url(#arr${gk})"/>`;
+  });
+
+  const sigMapped = [];
+  nodeStats.forEach((n, ni) => {
+    const pos = scaledPos[ni];
+    const nx = pos.x, ny = pos.y, nw = pos.w, nh = pos.h;
+    const rx = nx - nw/2, ry = ny - nh/2;
+    const stat = n.stat;
+    const passes = stat && Math.abs(stat.fc) >= fcThresh && stat.fdr <= fdrThresh;
+
+    let fill = '#e2e8f0', stroke = '#94a3b8', textCol = '#475569', strokeW = 0.8, dashAttr = '';
+    let tooltip = n.t;
+
+    if (stat) {
+      if (showMode === 'all' || passes) {
+        const col = rygFill(stat.fc, maxFC);
+        fill = col.fill; stroke = col.stroke; textCol = col.text;
+        strokeW = passes ? 2.5 : 1.2;
+        tooltip = `${n.t}\nLog2FC: ${stat.fc.toFixed(2)}\np: ${stat.pvalue.toExponential(2)}\nFDR: ${stat.fdr.toFixed(3)}`;
+        if (passes) sigMapped.push({...n, ...stat});
+      } else {
+        fill = '#f1f5f9'; stroke = '#cbd5e1'; textCol = '#94a3b8';
+        dashAttr = ' stroke-dasharray="3 2"';
+        tooltip = `${n.t} (FC=${stat.fc.toFixed(2)}, FDR=${stat.fdr.toFixed(3)} — below threshold)`;
+      }
+    }
+
+    const label = n.t.length > 15 ? n.t.slice(0,13) + '…' : n.t;
+    const fsize = Math.min(8.5, Math.max(5, nh * 0.38)).toFixed(1);
+    svg += `<rect x="${rx.toFixed(1)}" y="${ry.toFixed(1)}" width="${nw.toFixed(1)}" height="${nh.toFixed(1)}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeW}" rx="3"${dashAttr}><title>${tooltip}</title></rect>`;
+    svg += `<text x="${nx.toFixed(1)}" y="${(ny+3.5).toFixed(1)}" text-anchor="middle" font-size="${fsize}" fill="${textCol}" pointer-events="none" font-family="Arial,sans-serif">${label}</text>`;
+  });
+
+  if (unmapped.length) {
+    const uy0 = SVGH + 10;
+    svg += `<rect x="0" y="${SVGH}" width="${SVGW}" height="${UNMAPPED_H}" fill="#f1f5f9"/>`;
+    svg += `<text x="42" y="${uy0+14}" font-size="10" font-weight="bold" fill="#475569">Unmapped (${unmapped.length}) — not matched in dataset</text>`;
+    unmapped.forEach((n, i) => {
+      const col = Math.floor(i / uCols), row = i % uCols;
+      const ux  = 42 + row * (SVGW-84)/uCols;
+      const uy  = uy0 + 28 + col * 34;
+      const nw2 = (SVGW-84)/uCols - 4, nh2 = 24;
+      svg += `<rect x="${ux.toFixed(1)}" y="${uy}" width="${nw2.toFixed(1)}" height="${nh2}" fill="#e2e8f0" stroke="#94a3b8" stroke-width="0.5" rx="2"/>`;
+      svg += `<text x="${(ux+nw2/2).toFixed(1)}" y="${uy+14}" text-anchor="middle" font-size="7.5" fill="#475569">${n.t.length>14?n.t.slice(0,13)+'…':n.t}</text>`;
+    });
+  }
+  svg += '</svg>';
+
+  document.getElementById(containerId).innerHTML = svg;
+
+  const legEl = document.getElementById(legendId);
+  if (legEl) {
+    const gid = `rygLeg_${gk}`;
+    const filterLabel = fcThresh > 0 ? `, |FC|≥${fcThresh}` : '';
+    legEl.innerHTML = `
+    <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;padding:4px 0">
+      <div>
+        <div style="font-size:10px;color:#475569;margin-bottom:2px;text-align:center">Log₂ Fold Change</div>
+        <svg width="220" height="36" xmlns="http://www.w3.org/2000/svg">
+          <defs><linearGradient id="${gid}" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%"   stop-color="rgb(22,163,74)"/>
+            <stop offset="50%"  stop-color="rgb(251,191,36)"/>
+            <stop offset="100%" stop-color="rgb(220,38,38)"/>
+          </linearGradient></defs>
+          <rect x="5" y="4" width="210" height="18" fill="url(#${gid})" rx="3" stroke="#ccc" stroke-width="0.5"/>
+          <text x="5"   y="32" font-size="9" fill="#374151">▼ Down</text>
+          <text x="110" y="32" text-anchor="middle" font-size="9" fill="#374151">No change</text>
+          <text x="215" y="32" text-anchor="end"    font-size="9" fill="#374151">Up ▲</text>
+        </svg>
+      </div>
+      <div style="display:flex;align-items:center;gap:4px"><div style="width:16px;height:14px;background:#e2e8f0;border:1px solid #94a3b8;border-radius:2px"></div><span style="font-size:11px">No data</span></div>
+      <div style="display:flex;align-items:center;gap:4px"><div style="width:16px;height:14px;background:#f1f5f9;border:1px dashed #cbd5e1;border-radius:2px"></div><span style="font-size:11px">Below threshold</span></div>
+      <div style="font-size:11px;color:#475569">
+        ${nodeStats.length} nodes &middot; ${mapped.length} matched &middot;
+        <span style="color:#dc2626;font-weight:600">${sigMapped.length} pass filter (FDR&lt;${fdrThresh}${filterLabel})</span>
+      </div>
+    </div>`;
+  }
+
+  const hitEl = document.getElementById(hitListId);
+  if (hitEl && sigMapped.length) {
+    let tbl = `<div style="font-weight:600;margin-bottom:6px">Filtered Hits (${sigMapped.length})</div>
+    <div style="overflow:auto;max-height:300px"><table style="width:100%;border-collapse:collapse;font-size:11px">
+    <thead><tr style="background:#1a3a5c;color:#fff"><th style="padding:4px 8px">Compound</th><th>Log₂FC</th><th>p-value</th><th>FDR</th></tr></thead><tbody>`;
+    sigMapped.sort((a,b) => a.fdr - b.fdr).slice(0, 100).forEach((h, i) => {
+      const bg = i%2 ? '#f8fafc' : '#fff';
+      const fcCol = h.fc > 0 ? '#dc2626' : '#16a34a';
+      tbl += `<tr style="background:${bg}"><td style="padding:3px 8px">${h.name||h.t}</td><td style="text-align:right;color:${fcCol};font-weight:600">${h.fc.toFixed(2)}</td><td style="text-align:right">${h.pvalue.toExponential(2)}</td><td style="text-align:right">${h.fdr.toFixed(3)}</td></tr>`;
+    });
+    tbl += '</tbody></table></div>';
+    hitEl.innerHTML = tbl;
+  } else if (hitEl) {
+    hitEl.innerHTML = '';
+  }
 }
 
 function renderPathwayMap(){
   if(!APP.results||!APP.processed){
     document.getElementById('pathwayAlert').innerHTML='<div class="alert alert-warning">Please run analysis first.</div>';return;
   }
-  if(APP.dataType!=='polar'){
-    document.getElementById('pathwayAlert').innerHTML='<div class="alert alert-warning">Pathway map is only available for polar metabolite data.</div>';return;
-  }
   document.getElementById('pathwayAlert').innerHTML='';
-  const grpA=document.getElementById('pathGrpA')?.value;
-  const grpB=document.getElementById('pathGrpB')?.value;
-  const fdrThresh=parseFloat(document.getElementById('pathFdrThresh')?.value||0.05);
-  const grps=APP.processed.groups,mat=APP.processed.mat;
-  const allCmps=APP.processed.compounds;
-
-  // ── Build stat map for ALL compounds ──────────────────────────────────
-  const compStat={};
-  if(grpA&&grpB&&grpA!==grpB){
-    const idxA=grps.map((g,i)=>g===grpA?i:-1).filter(i=>i>=0);
-    const idxB=grps.map((g,i)=>g===grpB?i:-1).filter(i=>i>=0);
-    allCmps.forEach((cmp,fi)=>{
-      const vA=idxA.map(i=>mat[i][fi]),vB=idxB.map(i=>mat[i][fi]);
-      const fc=mean(vB)-mean(vA),pv=Math.max(1e-300,welchTTest(vA,vB));
-      compStat[fi]={fc,pvalue:pv,fdr:pv,sig:false,name:cmp.name};
-    });
-    // BH FDR correction
-    const sorted=Object.values(compStat).sort((a,b)=>a.pvalue-b.pvalue);
-    const m=sorted.length;
-    sorted.forEach((v,i)=>{v.fdr=Math.min(1,v.pvalue*m/(i+1));});
-    for(let i=m-2;i>=0;i--) sorted[i].fdr=Math.min(sorted[i].fdr,sorted[i+1].fdr);
-    Object.values(compStat).forEach(v=>{v.sig=v.fdr<fdrThresh;});
-  } else {
-    APP.results.forEach(r=>{compStat[r.idx]={fc:r.fc,pvalue:r.pvalue,fdr:r.fdr,sig:r.fdr<fdrThresh,name:r.name};});
-    allCmps.forEach((cmp,fi)=>{if(!compStat[fi])compStat[fi]={fc:0,pvalue:1,fdr:1,sig:false,name:cmp.name};});
-  }
-
-  // ── Match compounds to PATHWAY_NODES ──────────────────────────────────
-  const mappedByCoord={};  // "x,y" → {x,y,pw,...stat}
-  const mappedFiSet=new Set();
-  allCmps.forEach((cmp,fi)=>{
-    const stat=compStat[fi];
-    const lc=cmp.name.toLowerCase().trim();
-    let nd=null;
-    if(PATHWAY_NODES[lc]){ nd=PATHWAY_NODES[lc]; }
-    else { for(const [k,v] of Object.entries(PATHWAY_NODES)){if(lc.includes(k)||k.includes(lc)){nd=v;break;}} }
-    if(nd){
-      const [nx,ny,pw]=nd, ck=`${nx},${ny}`;
-      if(!mappedByCoord[ck]||stat.sig) mappedByCoord[ck]={x:nx,y:ny,pw,...stat};
-      mappedFiSet.add(fi);
-    }
-  });
-  const mappedNodes=Object.values(mappedByCoord);
-  const unmappedNodes=allCmps.map((cmp,fi)=>({fi,...(compStat[fi]||{fc:0,pvalue:1,fdr:1,sig:false,name:cmp.name})}))
-    .filter(({fi})=>!mappedFiSet.has(fi));
-
-  const allFC=Object.values(compStat).map(s=>Math.abs(s.fc)).filter(v=>isFinite(v)&&v>0);
-  const maxFC=allFC.length?Math.max(...allFC):1;
-
-  // ── Build SVG ─────────────────────────────────────────────────────────
-  const W=1100;
-  const MAIN_H=800;
-  const uCols=10;
-  const uRows=Math.ceil(unmappedNodes.length/uCols);
-  const UNMAPPED_H=uRows>0?uRows*34+64:0;
-  const H=MAIN_H+UNMAPPED_H;
-
-  const F='Arial,sans-serif';
-  let svg=`<svg id="pathwaySVG" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;display:block;background:#eef3fa;font-family:${F}">`;
-
-  // Grid background (circuit-board feel)
-  svg+=`<defs>
-    <pattern id="cgrid" width="25" height="25" patternUnits="userSpaceOnUse">
-      <path d="M 25 0 L 0 0 0 25" fill="none" stroke="#c8d8ec" stroke-width="0.4"/>
-    </pattern>
-  </defs>
-  <rect width="${W}" height="${H}" fill="url(#cgrid)"/>
-  <rect width="${W}" height="${MAIN_H}" fill="#eef3fa" opacity="0.55"/>`;
-
-  // Title
-  svg+=`<text x="${W/2}" y="28" text-anchor="middle" font-size="14" font-weight="bold" fill="#1a3a5c">Metabolic Pathway Map — ${grpB||'Case'} vs ${grpA||'Control'} (Log2 FC)</text>`;
-  svg+=`<text x="${W/2}" y="44" text-anchor="middle" font-size="9.5" fill="#64748b">All ${allCmps.length} compounds shown · ${mappedNodes.length} mapped · ${unmappedNodes.length} unmapped</text>`;
-
-  // Pathway region boxes (circuit-board rectangles)
-  PATHWAY_DEFS.forEach(([label,rx,ry,rw,rh,fill,tc,sc])=>{
-    svg+=`<rect x="${rx}" y="${ry}" width="${rw}" height="${rh}" fill="${fill}" stroke="${sc}" stroke-width="2" rx="3" opacity="0.82"/>`;
-    // Header stripe
-    svg+=`<rect x="${rx}" y="${ry}" width="${rw}" height="18" fill="${sc}" opacity="0.28" rx="3"/>`;
-    svg+=`<text x="${rx+rw/2}" y="${ry+13}" text-anchor="middle" font-size="10" font-weight="bold" fill="${tc}">${label}</text>`;
-  });
-
-  // Right-angle (orthogonal) connector paths — circuit-board style
-  [
-    // Glycolysis vertical flow
-    ['M 310 290 L 310 615', '#3b82f6', 2, 0.5],
-    // Glycolysis → TCA (pyruvate → acetyl-CoA)
-    ['M 310 510 L 460 510 L 460 445 L 510 445', '#3b82f6', 1.5, 0.6],
-    // TCA internal ring
-    ['M 530 480 L 510 480 L 510 430 L 620 430', '#22c55e', 2, 0.6],
-    ['M 620 430 L 760 430 L 760 450', '#22c55e', 2, 0.6],
-    ['M 760 450 L 790 450 L 790 560 L 730 560', '#22c55e', 2, 0.6],
-    ['M 730 560 L 640 560 L 640 590', '#22c55e', 2, 0.6],
-    ['M 640 590 L 560 590 L 560 570', '#22c55e', 2, 0.6],
-    ['M 560 570 L 540 570 L 540 480 L 530 480', '#22c55e', 1.5, 0.5],
-    // Glycolysis ↔ PPP branch
-    ['M 340 310 L 310 310', '#f59e0b', 1.5, 0.65],
-    ['M 340 170 L 310 170 L 310 310', '#f59e0b', 1.5, 0.65],
-    // PPP → Purine
-    ['M 530 155 L 590 155', '#8b5cf6', 1.5, 0.65],
-    // TCA → Amino Acids (glutamate axis)
-    ['M 790 640 L 790 570 L 760 570 L 760 450', '#16a34a', 1.5, 0.5],
-    // Urea ↔ Amino Acids
-    ['M 893 665 L 893 620', '#f97316', 1.5, 0.6],
-    ['M 893 500 L 893 445 L 975 445 L 975 500', '#f97316', 1.5, 0.6],
-    // Choline ↔ Glycolysis
-    ['M 210 390 L 220 390', '#0ea5e9', 1.5, 0.6],
-    // Pyrimidine ↔ PPP
-    ['M 310 185 L 340 185', '#ec4899', 1.5, 0.6],
-  ].forEach(([d,col,sw,op])=>{
-    svg+=`<path d="${d}" stroke="${col}" stroke-width="${sw}" fill="none" opacity="${op}" stroke-linecap="square" stroke-linejoin="miter"/>`;
-  });
-
-  // Draw ALL mapped compound nodes (both significant and not)
-  mappedNodes.forEach(h=>{
-    const sig=h.sig;
-    const col=sig?fcToColor(h.fc,maxFC):'#e8edf4';
-    const r=sig?9:5.5;
-    const stroke=sig?'#334155':'#8899aa';
-    const sw=sig?1.6:0.8;
-    const short=h.name.length>14?h.name.slice(0,14)+'…':h.name;
-    const fcStr=h.fc.toFixed(2),pStr=h.pvalue<0.001?h.pvalue.toExponential(1):h.pvalue.toFixed(3);
-    svg+=`<circle cx="${h.x}" cy="${h.y}" r="${r}" fill="${col}" stroke="${stroke}" stroke-width="${sw}">
-      <title>${h.name}&#10;Pathway: ${h.pw}&#10;Log2FC: ${fcStr}&#10;p: ${pStr}&#10;FDR: ${h.fdr.toFixed(3)}</title></circle>`;
-    // Always show labels; sig in dark, non-sig in lighter gray
-    const lf=sig?'#1e293b':'#7a8ea0', ls=sig?7.5:6;
-    svg+=`<text x="${h.x}" y="${h.y-r-2}" text-anchor="middle" font-size="${ls}" fill="${lf}">${short}</text>`;
-  });
-
-  // Color bar legend
-  const lx=38,ly=754,lw=210,lh=12;
-  svg+=`<text x="${lx}" y="${ly-6}" font-size="9" fill="#64748b">↓ Down-reg.</text>`;
-  svg+=`<text x="${lx+lw}" y="${ly-6}" font-size="9" fill="#64748b" text-anchor="end">↑ Up-reg.</text>`;
-  for(let i=0;i<30;i++){
-    const t=i/30,fc=(t*2-1)*maxFC,c=fcToColor(fc,maxFC);
-    svg+=`<rect x="${lx+i*(lw/30)}" y="${ly}" width="${lw/30+1}" height="${lh}" fill="${c}"/>`;
-  }
-  svg+=`<rect x="${lx}" y="${ly}" width="${lw}" height="${lh}" fill="none" stroke="#94a3b8" stroke-width="0.6"/>`;
-  svg+=`<text x="${lx+lw/2}" y="${ly+lh+12}" font-size="8" fill="#64748b" text-anchor="middle">Log2FC ±${maxFC.toFixed(2)}</text>`;
-  const legX=lx+lw+28;
-  svg+=`<circle cx="${legX+7}" cy="${ly+6}" r="8.5" fill="#fca5a5" stroke="#334155" stroke-width="1.5"/>`;
-  svg+=`<text x="${legX+22}" y="${ly+10}" font-size="9" fill="#374151">Sig. (FDR&lt;${fdrThresh})</text>`;
-  svg+=`<circle cx="${legX+7}" cy="${ly+25}" r="5" fill="#e8edf4" stroke="#8899aa" stroke-width="0.8"/>`;
-  svg+=`<text x="${legX+22}" y="${ly+29}" font-size="9" fill="#374151">Not significant</text>`;
-  if(unmappedNodes.length){
-    svg+=`<rect x="${legX+2}" y="${ly+38}" width="10" height="10" fill="#f0f9ff" stroke="#0ea5e9" stroke-width="1" rx="2"/>`;
-    svg+=`<text x="${legX+22}" y="${ly+47}" font-size="9" fill="#374151">Unmapped (below)</text>`;
-  }
-
-  // ── Unmapped compounds section ────────────────────────────────────────
-  if(unmappedNodes.length>0){
-    const uy0=MAIN_H+10;
-    svg+=`<rect x="30" y="${uy0}" width="${W-60}" height="${UNMAPPED_H-10}" fill="#f8fafc" stroke="#94a3b8" stroke-width="1.2" rx="4"/>`;
-    svg+=`<rect x="30" y="${uy0}" width="${W-60}" height="20" fill="#94a3b8" opacity="0.2" rx="4"/>`;
-    svg+=`<text x="42" y="${uy0+14}" font-size="10" font-weight="bold" fill="#475569">Unmapped Compounds (${unmappedNodes.length}) — not in pathway database</text>`;
-    unmappedNodes.forEach((u,i)=>{
-      const col_i=i%uCols, row_i=Math.floor(i/uCols);
-      const ux=42+col_i*((W-70)/uCols), uy2=uy0+26+row_i*33;
-      const sig=u.sig;
-      const fillCol=sig?fcToColor(u.fc,maxFC):'#e2e8f0';
-      const stroke=sig?'#334155':'#94a3b8';
-      const short=u.name.length>13?u.name.slice(0,13)+'…':u.name;
-      svg+=`<rect x="${ux}" y="${uy2}" width="${(W-80)/uCols-4}" height="22" fill="${fillCol}" stroke="${stroke}" stroke-width="${sig?1.2:0.6}" rx="3">
-        <title>${u.name}&#10;Log2FC: ${u.fc.toFixed(2)}&#10;p: ${u.pvalue.toFixed(3)}&#10;FDR: ${u.fdr.toFixed(3)}&#10;Not in pathway database</title></rect>`;
-      svg+=`<text x="${ux+((W-80)/uCols-4)/2}" y="${uy2+14}" text-anchor="middle" font-size="7" fill="${sig?'#1e293b':'#64748b'}">${short}</text>`;
-    });
-  }
-
-  svg+=`</svg>`;
-  document.getElementById('pathwayMapContainer').innerHTML=svg;
-
-  // ── Hit list table ────────────────────────────────────────────────────
-  const sigMapped=mappedNodes.filter(h=>h.sig).sort((a,b)=>a.fdr-b.fdr);
-  const sigUnmapped=unmappedNodes.filter(u=>u.sig).sort((a,b)=>a.fdr-b.fdr);
-  let tbl=`<div style="font-weight:600;margin-bottom:6px">
-    Total: ${allCmps.length} compounds · ${mappedNodes.length} pathway-mapped · ${unmappedNodes.length} unmapped · <span style="color:#dc2626">${sigMapped.length+sigUnmapped.length} significant (FDR&lt;${fdrThresh})</span></div>`;
-  if(sigMapped.length+sigUnmapped.length>0){
-    tbl+=`<div style="overflow-x:auto"><table class="stats-table" style="max-width:760px"><thead><tr>
-      <th>Compound</th><th>Pathway</th><th>Log2FC</th><th>p-value</th><th>FDR</th>
-    </tr></thead><tbody>`;
-    [...sigMapped,...sigUnmapped].forEach(h=>{
-      const dir=h.fc>0?'↑':'↓',dcol=h.fc>0?'#dc2626':'#2563a8';
-      tbl+=`<tr><td>${h.name}</td><td>${h.pw||'<i>unmapped</i>'}</td>
-        <td style="color:${dcol};font-weight:600">${dir} ${h.fc.toFixed(3)}</td>
-        <td>${h.pvalue.toExponential(2)}</td><td>${h.fdr.toExponential(2)}</td></tr>`;
-    });
-    tbl+='</tbody></table></div>';
-  }
-  document.getElementById('pathwayHitList').innerHTML=tbl;
-  document.getElementById('pathwayLegend').innerHTML='';
+  const grpA      = document.getElementById('pathGrpA')?.value;
+  const grpB      = document.getElementById('pathGrpB')?.value;
+  const fdrThresh = parseFloat(document.getElementById('pathFdrThresh')?.value||0.05);
+  const showMode  = document.getElementById('pathShowMode')?.value||'all';
+  const fcThresh  = parseFloat(document.getElementById('pathFcThresh')?.value||0);
+  // Polar Pathway tab always shows the 'polar' GPML; only exception: nonpolar-only project
+  const gpmlKey   = APP.projectMode==='nonpolar' ? 'lipid' : 'polar';
+  renderGPMLPathway(gpmlKey,'pathwaySVG','pathwayMapContainer','pathwayAlert','pathwayLegend','pathwayHitList',
+    grpA,grpB,fdrThresh,APP.processed,APP.results,{showMode,fcThresh});
 }
+
+function renderLipidPathway(){
+  const processed = APP.projectMode==='both'?APP.processedNonpolar:APP.processed;
+  const results   = APP.projectMode==='both'?APP.resultsNonpolar:APP.results;
+  if(!processed||!results){
+    document.getElementById('lipidPathwayAlert').innerHTML='<div class="alert alert-warning">Please load and analyze non-polar data first.</div>';return;
+  }
+  const grpA      = document.getElementById('lipidPathGrpA')?.value;
+  const grpB      = document.getElementById('lipidPathGrpB')?.value;
+  const fdrThresh = parseFloat(document.getElementById('lipidPathFdrThresh')?.value||0.05);
+  const showMode  = document.getElementById('lipidPathShowMode')?.value||'all';
+  const fcThresh  = parseFloat(document.getElementById('lipidPathFcThresh')?.value||0);
+  renderGPMLPathway('lipid','lipidPathwaySVG','lipidPathwayMapContainer','lipidPathwayAlert','lipidPathwayLegend','lipidPathwayHitList',
+    grpA,grpB,fdrThresh,processed,results,{showMode,fcThresh});
+}
+
+function renderIntegratedPathway(){
+  if(!APP.processed||!APP.results){
+    document.getElementById('intPathwayAlert').innerHTML='<div class="alert alert-warning">Please run analysis first.</div>';return;
+  }
+  const grpA      = document.getElementById('intPathGrpA')?.value;
+  const grpB      = document.getElementById('intPathGrpB')?.value;
+  const fdrThresh = parseFloat(document.getElementById('intPathFdrThresh')?.value||0.05);
+  const showMode  = document.getElementById('intPathShowMode')?.value||'all';
+  const fcThresh  = parseFloat(document.getElementById('intPathFcThresh')?.value||0);
+  renderGPMLPathway('integrated','intPathwaySVG','intPathwayMapContainer','intPathwayAlert','intPathwayLegend','intPathwayHitList',
+    grpA,grpB,fdrThresh,APP.processed,APP.results,{showMode,fcThresh});
+}
+
 
 function buildWordHTML(images, rpt) {
   const {compounds,groups,names}=APP.processed||{};
@@ -2337,6 +2628,43 @@ function updateLoading(msg='',detail='') {
 }
 function hideLoading() { document.getElementById('loadingOverlay').style.display='none'; }
 function log(msg) { console.log('[MetaboAnalyzer]',msg); }
+
+function handleFileNP(file){
+  showLoading('Parsing non-polar Excel file…','');
+  parseExcel(file).then(data => {
+    APP.rawNonpolar = data;
+    APP.dataTypeNonpolar = 'nonpolar';
+    document.getElementById('fileInfoNP').style.display='block';
+    document.getElementById('fileInfoNP').innerHTML=`<div class="alert alert-success">✅ Non-polar: <b>${file.name}</b> — ${data.compounds.length} compounds, ${data.sampleIds.length} samples</div>`;
+    hideLoading();
+  }).catch(err => {
+    hideLoading();
+    document.getElementById('fileInfoNP').style.display='block';
+    document.getElementById('fileInfoNP').innerHTML=`<div class="alert alert-error">❌ ${err.message}</div>`;
+  });
+}
+
+function setProjectMode(mode){
+  APP.projectMode=mode;
+  const polarLbl=document.getElementById('polarUploadLabel');
+  const npSection=document.getElementById('nonpolarUploadSection');
+  const lipidBtn=document.getElementById('lipidPathwayTabBtn');
+  const intBtn=document.getElementById('integratedPathwayTabBtn');
+  if(mode==='polar'){
+    if(polarLbl) polarLbl.style.display='none';
+    if(npSection) npSection.style.display='none';
+  } else if(mode==='nonpolar'){
+    if(polarLbl) polarLbl.style.display='none';
+    if(npSection) npSection.style.display='none';
+  } else {
+    if(polarLbl) polarLbl.style.display='block';
+    if(npSection) npSection.style.display='block';
+  }
+  if(lipidBtn) lipidBtn.style.display=(mode==='nonpolar'||mode==='both')?'block':'none';
+  if(intBtn) intBtn.style.display='none';  // integrated tab removed
+  const npAnalysis=document.getElementById('nonpolarAnalysisSection');
+  if(npAnalysis) npAnalysis.style.display=(mode==='both')?'block':'none';
+}
 
 // Initialize
 window.addEventListener('DOMContentLoaded', () => {
