@@ -1,0 +1,1864 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Metabolomics Analyzer — MetaboAnalystR Workflow</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Arial,sans-serif;background:#f4f6fb;color:#222;font-size:14px}
+h1{font-size:1.5rem;color:#1a3a5c;font-weight:700}
+h2{font-size:1.15rem;color:#1a3a5c;margin-bottom:8px}
+h3{font-size:1rem;color:#2c5282;margin-bottom:6px}
+.top-bar{background:linear-gradient(90deg,#1a3a5c 0%,#2563a8 100%);color:#fff;padding:14px 28px;display:flex;align-items:center;gap:16px}
+.top-bar img{height:36px}
+.container{max-width:1400px;margin:0 auto;padding:16px}
+.card{background:#fff;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,0.08);padding:20px;margin-bottom:18px}
+.section-title{font-size:1.05rem;font-weight:700;color:#1a3a5c;border-bottom:2px solid #e2e8f0;padding-bottom:6px;margin-bottom:14px}
+.btn{display:inline-block;padding:8px 18px;border-radius:6px;border:none;cursor:pointer;font-size:13px;font-weight:600;transition:background 0.2s}
+.btn-primary{background:#2563a8;color:#fff}.btn-primary:hover{background:#1a4a8a}
+.btn-success{background:#16a34a;color:#fff}.btn-success:hover{background:#15803d}
+.btn-warning{background:#d97706;color:#fff}.btn-warning:hover{background:#b45309}
+.btn-danger{background:#dc2626;color:#fff}.btn-danger:hover{background:#b91c1c}
+.btn-secondary{background:#64748b;color:#fff}.btn-secondary:hover{background:#475569}
+.btn-sm{padding:4px 10px;font-size:12px}
+input[type=text],input[type=number],select{border:1px solid #cbd5e1;border-radius:5px;padding:5px 9px;font-size:13px;background:#fff}
+input[type=text]:focus,input[type=number]:focus,select:focus{outline:none;border-color:#2563a8}
+label{font-size:12px;color:#475569;font-weight:600;display:block;margin-bottom:3px}
+.row{display:flex;gap:14px;flex-wrap:wrap}
+.col{flex:1;min-width:200px}
+.upload-zone{border:2px dashed #93c5fd;background:#eff6ff;border-radius:10px;padding:32px;text-align:center;cursor:pointer;transition:border-color 0.2s}
+.upload-zone:hover,.upload-zone.drag{border-color:#2563a8;background:#dbeafe}
+.upload-zone p{color:#64748b;margin-top:8px}
+.upload-zone .icon{font-size:2.5rem}
+.progress-bar{height:8px;background:#e2e8f0;border-radius:4px;overflow:hidden;margin:6px 0}
+.progress-bar-inner{height:100%;background:#2563a8;border-radius:4px;transition:width 0.3s}
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+.badge-blue{background:#dbeafe;color:#1d4ed8}
+.badge-green{background:#dcfce7;color:#16a34a}
+.badge-red{background:#fee2e2;color:#dc2626}
+.badge-yellow{background:#fef9c3;color:#854d0e}
+.badge-gray{background:#f1f5f9;color:#475569}
+table.stats-table{width:100%;border-collapse:collapse;font-size:12px}
+table.stats-table th{background:#1a3a5c;color:#fff;padding:7px 10px;text-align:left;white-space:nowrap}
+table.stats-table td{padding:5px 10px;border-bottom:1px solid #e2e8f0}
+table.stats-table tr:hover td{background:#f8fafc}
+table.stats-table tr.sig td{background:#fef2f2}
+.tab-bar{display:flex;gap:2px;border-bottom:2px solid #e2e8f0;margin-bottom:16px}
+.tab{padding:8px 18px;cursor:pointer;border-radius:6px 6px 0 0;font-weight:600;font-size:13px;color:#64748b;background:#f1f5f9;border:1px solid transparent}
+.tab.active{background:#2563a8;color:#fff;border-color:#2563a8}
+.tab-content{display:none}.tab-content.active{display:block}
+.sample-config-table{width:100%;border-collapse:collapse;font-size:12px}
+.sample-config-table th{background:#e2e8f0;padding:6px 10px;text-align:left}
+.sample-config-table td{padding:4px 6px;border-bottom:1px solid #f1f5f9}
+.sample-config-table td input{width:100%;font-size:12px}
+.alert{padding:10px 14px;border-radius:6px;margin-bottom:10px;font-size:13px}
+.alert-info{background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af}
+.alert-warning{background:#fffbeb;border:1px solid #fde68a;color:#92400e}
+.alert-success{background:#f0fdf4;border:1px solid #bbf7d0;color:#166534}
+.alert-error{background:#fef2f2;border:1px solid #fecaca;color:#991b1b}
+#loadingOverlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center}
+.loading-box{background:#fff;border-radius:10px;padding:30px 40px;text-align:center}
+.spinner{width:40px;height:40px;border:4px solid #e2e8f0;border-top-color:#2563a8;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 12px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.step-indicator{display:flex;gap:0;margin-bottom:20px}
+.step{flex:1;text-align:center;padding:10px 4px;font-size:11px;font-weight:600;color:#94a3b8;background:#f1f5f9;border-right:1px solid #e2e8f0;position:relative}
+.step:last-child{border-right:none}
+.step.active{background:#2563a8;color:#fff}
+.step.done{background:#16a34a;color:#fff}
+.step-num{display:block;font-size:1.2rem;margin-bottom:2px}
+.plot-container{width:100%;min-height:400px;border-radius:8px;overflow:hidden}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.clinical-table{width:100%;border-collapse:collapse;font-size:12px}
+.clinical-table th{background:#e2e8f0;padding:6px 10px;text-align:left}
+.clinical-table td{padding:4px 6px;border-bottom:1px solid #f1f5f9}
+.group-legend{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.group-dot{width:12px;height:12px;border-radius:50%;display:inline-block;margin-right:4px}
+.norm-opt label{display:flex;align-items:center;gap:6px;font-weight:400;font-size:13px;cursor:pointer;margin-bottom:4px}
+.norm-opt input[type=radio]{margin:0}
+.pair-pair{color:#7c3aed;font-size:11px;font-weight:600}
+select.group-assign{width:100%}
+.export-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+.tooltip-icon{display:inline-block;width:16px;height:16px;background:#2563a8;color:#fff;border-radius:50%;text-align:center;line-height:16px;font-size:10px;cursor:help;vertical-align:middle}
+#stepNav{display:flex;gap:8px;margin-top:14px}
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <div style="font-size:1.4rem;">⚗️</div>
+  <div>
+    <h1>Metabolomics Analyzer</h1>
+    <div style="font-size:11px;opacity:0.8">MetaboAnalystR-based workflow · TMU Glycomedicine</div>
+  </div>
+</div>
+
+<div id="loadingOverlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center">
+  <div class="loading-box">
+    <div class="spinner"></div>
+    <div id="loadingMsg" style="font-weight:600;color:#1a3a5c">Processing…</div>
+    <div id="loadingDetail" style="font-size:12px;color:#64748b;margin-top:4px"></div>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- STEP INDICATOR -->
+<div class="step-indicator" id="stepIndicator">
+  <div class="step active" id="s1"><span class="step-num">①</span>Upload</div>
+  <div class="step" id="s2"><span class="step-num">②</span>Configure</div>
+  <div class="step" id="s3"><span class="step-num">③</span>Process</div>
+  <div class="step" id="s4"><span class="step-num">④</span>Analyze</div>
+  <div class="step" id="s5"><span class="step-num">⑤</span>Visualize</div>
+  <div class="step" id="s6"><span class="step-num">⑥</span>Export</div>
+</div>
+
+<!-- STEP 1: UPLOAD -->
+<div id="step1" class="tab-content active">
+<div class="card">
+  <div class="section-title">📂 Upload Metabolomics Data</div>
+  <div class="alert alert-info">
+    Supports non-polar (C18 lipid) and polar metabolite Excel files exported from MassHunter / Skyline.<br>
+    Expected format: Row 1 = Sample IDs (columns E+), Row 2 = Headers, Row 3+ = Compound data.
+  </div>
+  <div class="upload-zone" id="uploadZone">
+    <div class="icon">📊</div>
+    <div style="font-size:1rem;font-weight:600;color:#2563a8;margin-top:6px">Drop Excel file here or click to browse</div>
+    <p>Accepts .xlsx / .xls format</p>
+    <input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none">
+  </div>
+  <div id="fileInfo" style="display:none;margin-top:14px"></div>
+</div>
+<div id="stepNav" style="justify-content:flex-end">
+  <button class="btn btn-primary" id="toStep2Btn" style="display:none" onclick="goStep(2)">Next: Configure Samples →</button>
+</div>
+</div>
+
+<!-- STEP 2: CONFIGURE -->
+<div id="step2" class="tab-content">
+<div class="card">
+  <div class="section-title">⚙️ Sample Configuration</div>
+  <div class="row" style="margin-bottom:14px">
+    <div class="col">
+      <label>Study Design</label>
+      <div class="norm-opt">
+        <label><input type="radio" name="studyDesign" value="twogroup" checked onchange="updateDesign()"> Two-group comparison</label>
+        <label><input type="radio" name="studyDesign" value="multigroup" onchange="updateDesign()"> Multi-group (3+)</label>
+        <label><input type="radio" name="studyDesign" value="timeseries" onchange="updateDesign()"> Time-series</label>
+      </div>
+    </div>
+    <div class="col">
+      <label>Pairing</label>
+      <div class="norm-opt">
+        <label><input type="radio" name="pairMode" value="unpaired" checked> Unpaired (independent groups)</label>
+        <label><input type="radio" name="pairMode" value="paired"> Paired (matched samples)</label>
+      </div>
+    </div>
+    <div class="col">
+      <label>Group Names (comma-separated)</label>
+      <input type="text" id="groupNames" value="Control,Case" style="width:100%" oninput="updateGroupNames()">
+      <div id="groupNamePreview" style="margin-top:4px"></div>
+    </div>
+  </div>
+  <div style="margin-bottom:8px;font-weight:600;color:#1a3a5c;font-size:13px">Sample Assignment Table</div>
+  <div id="sampleConfigArea" style="overflow-x:auto;max-height:500px;overflow-y:auto"></div>
+</div>
+<div class="card">
+  <div class="section-title">🔬 Clinical Variables (Optional)</div>
+  <div class="alert alert-info">Add clinical/phenotypic data per sample. These will be included in the export CSV.</div>
+  <div style="margin-bottom:8px">
+    <button class="btn btn-secondary btn-sm" onclick="addClinicalVar()">+ Add Variable</button>
+  </div>
+  <div id="clinicalVarDefs"></div>
+  <div id="clinicalDataTable" style="overflow-x:auto;margin-top:10px;max-height:350px;overflow-y:auto"></div>
+</div>
+<div id="stepNav" style="display:flex;gap:8px;justify-content:space-between">
+  <button class="btn btn-secondary" onclick="goStep(1)">← Back</button>
+  <button class="btn btn-primary" onclick="goStep(3)">Next: Process Data →</button>
+</div>
+</div>
+
+<!-- STEP 3: PROCESS -->
+<div id="step3" class="tab-content">
+<div class="card">
+  <div class="section-title">🧪 Data Processing (MetaboAnalystR Pipeline)</div>
+  <div class="two-col">
+    <div>
+      <h3>Missing Value Handling</h3>
+      <div class="norm-opt">
+        <label><input type="radio" name="mvMethod" value="min5" checked> Replace with 1/5 of minimum (MetaboAnalyst default)</label>
+        <label><input type="radio" name="mvMethod" value="min"> Replace with minimum observed</label>
+        <label><input type="radio" name="mvMethod" value="median"> Replace with feature median</label>
+        <label><input type="radio" name="mvMethod" value="knn"> KNN imputation (k=5)</label>
+        <label><input type="radio" name="mvMethod" value="exclude"> Exclude features with &gt;50% missing</label>
+      </div>
+    </div>
+    <div>
+      <h3>Sample Normalization</h3>
+      <div class="norm-opt">
+        <label><input type="radio" name="normMethod" value="none" checked> None (use raw values)</label>
+        <label><input type="radio" name="normMethod" value="sum"> Sum normalization</label>
+        <label><input type="radio" name="normMethod" value="median"> Median normalization</label>
+        <label><input type="radio" name="normMethod" value="reference"> Reference feature normalization</label>
+        <label><input type="radio" name="normMethod" value="quantile"> Quantile normalization</label>
+      </div>
+    </div>
+    <div>
+      <h3>Data Transformation</h3>
+      <div class="norm-opt">
+        <label><input type="radio" name="transMethod" value="log2" checked> Log2 transformation (recommended)</label>
+        <label><input type="radio" name="transMethod" value="log10"> Log10 transformation</label>
+        <label><input type="radio" name="transMethod" value="sqrt"> Square root transformation</label>
+        <label><input type="radio" name="transMethod" value="none"> None</label>
+      </div>
+    </div>
+    <div>
+      <h3>Data Scaling</h3>
+      <div class="norm-opt">
+        <label><input type="radio" name="scaleMethod" value="auto" checked> Auto scaling (unit variance)</label>
+        <label><input type="radio" name="scaleMethod" value="pareto"> Pareto scaling</label>
+        <label><input type="radio" name="scaleMethod" value="range"> Range scaling</label>
+        <label><input type="radio" name="scaleMethod" value="none"> None</label>
+      </div>
+    </div>
+  </div>
+  <div class="row" style="margin-top:14px">
+    <div class="col">
+      <h3>Statistical Test</h3>
+      <select id="statTest" style="width:100%">
+        <option value="auto">Auto-select based on data</option>
+        <option value="ttest">Welch's t-test (unpaired, 2-group)</option>
+        <option value="paired_ttest">Paired t-test</option>
+        <option value="mann_whitney">Mann-Whitney U (non-parametric)</option>
+        <option value="wilcoxon">Wilcoxon signed-rank (paired)</option>
+        <option value="anova">One-way ANOVA (multi-group)</option>
+        <option value="kruskal">Kruskal-Wallis (non-parametric, multi)</option>
+      </select>
+    </div>
+    <div class="col">
+      <h3>FDR Correction</h3>
+      <select id="fdrMethod" style="width:100%">
+        <option value="bh">Benjamini-Hochberg (BH)</option>
+        <option value="bonferroni">Bonferroni</option>
+        <option value="none">None (raw p-values)</option>
+      </select>
+    </div>
+    <div class="col">
+      <h3>Significance Thresholds</h3>
+      <label>FDR/p threshold</label>
+      <input type="number" id="pThresh" value="0.05" min="0" max="1" step="0.01" style="width:100%">
+      <label style="margin-top:6px">Fold Change threshold (log2)</label>
+      <input type="number" id="fcThresh" value="1" min="0" step="0.1" style="width:100%">
+    </div>
+  </div>
+  <div style="margin-top:16px">
+    <button class="btn btn-primary" onclick="runProcessing()">▶ Run Processing &amp; Analysis</button>
+  </div>
+  <div id="processingLog" style="margin-top:14px;font-size:12px;color:#475569;white-space:pre-wrap"></div>
+</div>
+<div id="stepNav" style="display:flex;gap:8px;justify-content:space-between">
+  <button class="btn btn-secondary" onclick="goStep(2)">← Back</button>
+  <button class="btn btn-primary" id="toStep4Btn" style="display:none" onclick="goStep(4)">Next: View Analysis →</button>
+</div>
+</div>
+
+<!-- STEP 4: ANALYSIS RESULTS -->
+<div id="step4" class="tab-content">
+<div class="card">
+  <div class="section-title">📊 Statistical Analysis Results</div>
+  <div id="analysisOverview" style="margin-bottom:12px"></div>
+  <div class="tab-bar">
+    <div class="tab active" onclick="showAnalysisTab('sigTable',this)">Significant Features</div>
+    <div class="tab" onclick="showAnalysisTab('volcanoTab',this)">Volcano Plot</div>
+    <div class="tab" onclick="showAnalysisTab('foldChangeTab',this)">Fold Change</div>
+    <div class="tab" onclick="showAnalysisTab('classBreakdown',this)">Class Breakdown</div>
+  </div>
+  <div id="sigTable" class="tab-content active">
+    <div id="sigTableContent"></div>
+  </div>
+  <div id="volcanoTab" class="tab-content">
+    <div id="volcanoPlot" class="plot-container"></div>
+  </div>
+  <div id="foldChangeTab" class="tab-content">
+    <div id="fcPlot" class="plot-container"></div>
+  </div>
+  <div id="classBreakdown" class="tab-content">
+    <div id="classBreakdownPlot" class="plot-container"></div>
+  </div>
+</div>
+<div id="stepNav" style="display:flex;gap:8px;justify-content:space-between">
+  <button class="btn btn-secondary" onclick="goStep(3)">← Back</button>
+  <button class="btn btn-primary" onclick="goStep(5)">Next: Visualizations →</button>
+</div>
+</div>
+
+<!-- STEP 5: VISUALIZATIONS -->
+<div id="step5" class="tab-content">
+<div class="card">
+  <div class="section-title">📈 Multivariate &amp; Exploratory Analysis</div>
+  <div class="tab-bar">
+    <div class="tab active" onclick="showVizTab('pcaTab',this)">PCA</div>
+    <div class="tab" onclick="showVizTab('plsdaTab',this)">PLS-DA &amp; VIP</div>
+    <div class="tab" onclick="showVizTab('nmdsTab',this)">NMDS</div>
+    <div class="tab" onclick="showVizTab('heatmapTab',this)">Heatmap</div>
+    <div class="tab" onclick="showVizTab('boxTab',this)">Box / Violin</div>
+    <div class="tab" onclick="showVizTab('barTab',this)">Bar Plots</div>
+  </div>
+  <div id="pcaTab" class="tab-content active">
+    <div class="two-col" style="margin-bottom:10px">
+      <div><label>PC X-axis</label><select id="pcX" style="width:100%"><option value="0">PC1</option><option value="1">PC2</option><option value="2">PC3</option></select></div>
+      <div><label>PC Y-axis</label><select id="pcY" style="width:100%"><option value="0">PC1</option><option value="1" selected>PC2</option><option value="2">PC3</option></select></div>
+    </div>
+    <button class="btn btn-primary btn-sm" onclick="renderPCA()" style="margin-bottom:10px">Refresh PCA Plot</button>
+    <div id="pcaPlot" class="plot-container"></div>
+    <div id="pcaScree" class="plot-container" style="min-height:250px;margin-top:10px"></div>
+  </div>
+  <div id="plsdaTab" class="tab-content">
+    <button class="btn btn-primary btn-sm" onclick="renderPLSDA()" style="margin-bottom:10px">Refresh PLS-DA &amp; VIP</button>
+    <div class="two-col">
+      <div id="plsdaScorePlot" class="plot-container"></div>
+      <div id="vipPlot" class="plot-container"></div>
+    </div>
+  </div>
+  <div id="nmdsTab" class="tab-content">
+    <button class="btn btn-primary btn-sm" onclick="renderNMDS()" style="margin-bottom:10px">Refresh NMDS</button>
+    <div id="nmdsPlot" class="plot-container"></div>
+    <div id="nmdsStress" style="font-size:12px;color:#64748b;margin-top:6px"></div>
+  </div>
+  <div id="heatmapTab" class="tab-content">
+    <div class="row" style="margin-bottom:10px">
+      <div class="col"><label>Top N features</label><input type="number" id="heatmapN" value="50" min="5" max="200" style="width:100%"></div>
+      <div class="col"><label>Feature ranking</label>
+        <select id="heatmapRank" style="width:100%">
+          <option value="pvalue">By p-value</option>
+          <option value="fc">By fold change</option>
+          <option value="vip">By VIP score</option>
+        </select>
+      </div>
+      <div class="col" style="align-self:flex-end"><button class="btn btn-primary btn-sm" onclick="renderHeatmap()">Refresh Heatmap</button></div>
+    </div>
+    <div id="heatmapPlot" class="plot-container" style="min-height:600px"></div>
+  </div>
+  <div id="boxTab" class="tab-content">
+    <div class="row" style="margin-bottom:10px">
+      <div class="col"><label>Feature to plot</label><select id="boxFeatureSelect" style="width:100%" onchange="renderBoxViolin()"></select></div>
+      <div class="col"><label>Plot type</label>
+        <select id="boxType" style="width:100%" onchange="renderBoxViolin()">
+          <option value="box">Box plot</option>
+          <option value="violin">Violin plot</option>
+          <option value="both">Box + Violin</option>
+        </select>
+      </div>
+    </div>
+    <div id="boxViolinPlot" class="plot-container"></div>
+    <div style="margin-top:10px">
+      <div style="font-weight:600;font-size:13px;margin-bottom:6px">Top Significant Features (Box)</div>
+      <div id="topBoxPlots"></div>
+    </div>
+  </div>
+  <div id="barTab" class="tab-content">
+    <div class="row" style="margin-bottom:10px">
+      <div class="col"><label>Feature</label><select id="barFeatureSelect" style="width:100%" onchange="renderBar()"></select></div>
+      <div class="col" style="align-self:flex-end"><button class="btn btn-primary btn-sm" onclick="renderTopBars()">Plot Top 20 Sig Features</button></div>
+    </div>
+    <div id="barPlot" class="plot-container"></div>
+    <div id="topBarPlots" style="margin-top:10px"></div>
+  </div>
+</div>
+<div id="stepNav" style="display:flex;gap:8px;justify-content:space-between">
+  <button class="btn btn-secondary" onclick="goStep(4)">← Back</button>
+  <button class="btn btn-primary" onclick="goStep(6)">Next: Export →</button>
+</div>
+</div>
+
+<!-- STEP 6: EXPORT -->
+<div id="step6" class="tab-content">
+<div class="card">
+  <div class="section-title">📤 Export Results</div>
+  <div class="two-col">
+    <div>
+      <h3>MetaboAnalystR-Compatible CSV</h3>
+      <p style="font-size:12px;color:#64748b;margin-bottom:10px">Processed data formatted for direct import into MetaboAnalystR / RStudio.<br>Rows = samples, Columns = SampleID, Group, metabolites.</p>
+      <div class="norm-opt">
+        <label><input type="radio" name="csvContent" value="processed" checked> Processed data (normalized + transformed)</label>
+        <label><input type="radio" name="csvContent" value="raw"> Raw data (imputed only)</label>
+        <label><input type="radio" name="csvContent" value="significant"> Significant features only</label>
+      </div>
+      <div style="margin-top:10px">
+        <button class="btn btn-success" onclick="exportCSV()">⬇ Download CSV</button>
+      </div>
+    </div>
+    <div>
+      <h3>Statistics Table (CSV)</h3>
+      <p style="font-size:12px;color:#64748b;margin-bottom:10px">Full statistical results: p-values, FDR, fold change, mean ± SD per group.</p>
+      <button class="btn btn-success" onclick="exportStatsCSV()">⬇ Download Stats CSV</button>
+    </div>
+  </div>
+  <hr style="margin:16px 0;border-color:#e2e8f0">
+  <h3>Word Report (with embedded figures)</h3>
+  <div class="alert alert-info" style="margin-bottom:10px">
+    Generates a comprehensive Word-compatible report including data summary, processing log, statistical results table, and all visualization figures.
+  </div>
+  <div class="norm-opt" style="margin-bottom:10px">
+    <label><input type="checkbox" id="rptOverview" checked> Data Overview &amp; Quality</label>
+    <label><input type="checkbox" id="rptStats" checked> Statistical Results Table</label>
+    <label><input type="checkbox" id="rptPCA" checked> PCA Plot</label>
+    <label><input type="checkbox" id="rptNMDS" checked> NMDS Plot</label>
+    <label><input type="checkbox" id="rptVIP" checked> PLS-DA Score + VIP Plot</label>
+    <label><input type="checkbox" id="rptHeatmap" checked> Heatmap</label>
+    <label><input type="checkbox" id="rptBox" checked> Box/Violin Plots (top 10 sig)</label>
+    <label><input type="checkbox" id="rptBar" checked> Bar Plots (top 10 sig)</label>
+  </div>
+  <button class="btn btn-warning" onclick="exportWordReport()">📄 Generate &amp; Download Word Report</button>
+  <div id="exportStatus" style="margin-top:10px"></div>
+</div>
+<div id="stepNav" style="display:flex;gap:8px;justify-content:space-between">
+  <button class="btn btn-secondary" onclick="goStep(5)">← Back</button>
+</div>
+</div>
+
+</div><!-- /container -->
+
+<script>
+// =====================================================================
+// GLOBAL STATE
+// =====================================================================
+const APP = {
+  raw: null,          // { sampleIds, compounds, matrix }
+  config: {           // sample configuration
+    sampleNames: [],
+    groups: [],
+    pairIds: [],
+    design: 'twogroup',
+    paired: false,
+    groupNames: ['Control','Case'],
+    clinicalVars: [],
+    clinicalData: {}  // varName -> [values per sample]
+  },
+  processing: {
+    mvMethod: 'min5',
+    normMethod: 'none',
+    transMethod: 'log2',
+    scaleMethod: 'auto',
+    statTest: 'auto',
+    fdrMethod: 'bh',
+    pThresh: 0.05,
+    fcThresh: 1.0
+  },
+  processed: null,    // processed data matrix (samples × features)
+  results: null,      // statistical results per feature
+  pca: null,
+  plsda: null,
+  nmds: null,
+  currentStep: 1
+};
+
+const COLORS = ['#2563a8','#dc2626','#16a34a','#d97706','#7c3aed','#db2777','#0891b2','#65a30d','#ea580c','#0f766e'];
+
+// =====================================================================
+// STEP NAVIGATION
+// =====================================================================
+function goStep(n) {
+  for (let i = 1; i <= 6; i++) {
+    document.getElementById('step'+i).classList.remove('active');
+    const si = document.getElementById('s'+i);
+    if (i < n) { si.className='step done'; }
+    else if (i === n) { si.className='step active'; }
+    else { si.className='step'; }
+  }
+  document.getElementById('step'+n).classList.add('active');
+  APP.currentStep = n;
+  window.scrollTo({top:0,behavior:'smooth'});
+  if (n===4 && APP.results) renderAnalysis();
+  if (n===5 && APP.results) { renderPCA(); renderPLSDA(); renderNMDS(); renderHeatmap(); populateFeatureSelects(); }
+}
+
+// =====================================================================
+// UPLOAD & PARSE
+// =====================================================================
+const uploadZone = document.getElementById('uploadZone');
+const fileInput = document.getElementById('fileInput');
+uploadZone.addEventListener('click', () => fileInput.click());
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag'));
+uploadZone.addEventListener('drop', e => { e.preventDefault(); uploadZone.classList.remove('drag'); if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) handleFile(fileInput.files[0]); });
+
+function handleFile(file) {
+  showLoading('Parsing Excel file…');
+  parseExcel(file).then(data => {
+    APP.raw = data;
+    APP.config.sampleNames = [...data.sampleIds];
+    APP.config.groups = new Array(data.sampleIds.length).fill('');
+    APP.config.pairIds = new Array(data.sampleIds.length).fill('');
+    displayFileInfo(file, data);
+    buildSampleConfigTable();
+    hideLoading();
+    document.getElementById('toStep2Btn').style.display='inline-block';
+    log('File loaded: '+file.name+'\n  Compounds: '+data.compounds.length+'\n  Samples: '+data.sampleIds.length);
+  }).catch(err => {
+    hideLoading();
+    alert('Error parsing file: '+err.message);
+  });
+}
+
+function parseExcel(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const wb = XLSX.read(e.target.result, {type:'array'});
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const data = XLSX.utils.sheet_to_json(ws, {header:1, defval:null});
+        // Row 0 = sample IDs at indices 4+
+        const row0 = data[0] || [];
+        const sampleIds = [];
+        for (let j = 4; j < row0.length; j++) {
+          if (row0[j] !== null && row0[j] !== undefined && String(row0[j]).trim() !== '')
+            sampleIds.push(String(row0[j]).trim());
+        }
+        const nSamples = sampleIds.length;
+        const compounds = [];
+        const matrix = Array.from({length:nSamples}, () => []);
+        let nullCount = 0;
+        for (let i = 2; i < data.length; i++) {
+          const row = data[i];
+          if (!row || !row[3]) continue;
+          const name = String(row[3]).trim();
+          if (!name) continue;
+          compounds.push({
+            group: row[0] ? String(row[0]).trim() : '',
+            transition: row[1] ? String(row[1]).trim() : '',
+            cas: row[2] ? String(row[2]).trim() : '',
+            name: name
+          });
+          for (let j = 0; j < nSamples; j++) {
+            const v = row[4 + j];
+            if (v === null || v === undefined || v === '' || isNaN(parseFloat(v))) {
+              matrix[j].push(null);
+              nullCount++;
+            } else {
+              matrix[j].push(parseFloat(v));
+            }
+          }
+        }
+        resolve({sampleIds, compounds, matrix, nullCount});
+      } catch(err) { reject(err); }
+    };
+    reader.onerror = () => reject(new Error('File read error'));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+function displayFileInfo(file, data) {
+  const groups = {};
+  data.compounds.forEach(c => { groups[c.group] = (groups[c.group]||0)+1; });
+  const missingPct = ((data.nullCount / (data.sampleIds.length * data.compounds.length))*100).toFixed(1);
+  let html = `<div class="alert alert-success">
+    <b>✅ File loaded:</b> ${file.name} (${(file.size/1024).toFixed(1)} KB)<br>
+    <b>Compounds:</b> ${data.compounds.length} &nbsp;|&nbsp; <b>Samples:</b> ${data.sampleIds.length} &nbsp;|&nbsp;
+    <b>Missing values:</b> ${data.nullCount} (${missingPct}%)<br>
+    <b>Compound classes:</b> ${Object.keys(groups).filter(g=>g).length}
+  </div>
+  <div style="font-size:12px;color:#475569;margin-top:6px">
+    <b>Classes:</b> ${Object.entries(groups).filter(([k])=>k).map(([k,v])=>`${k}(${v})`).join(', ')}
+  </div>`;
+  document.getElementById('fileInfo').innerHTML = html;
+  document.getElementById('fileInfo').style.display = 'block';
+}
+
+// =====================================================================
+// SAMPLE CONFIGURATION
+// =====================================================================
+function updateDesign() {
+  APP.config.design = document.querySelector('input[name=studyDesign]:checked').value;
+}
+function updateGroupNames() {
+  const txt = document.getElementById('groupNames').value;
+  APP.config.groupNames = txt.split(',').map(s=>s.trim()).filter(Boolean);
+  buildSampleConfigTable();
+}
+function buildSampleConfigTable() {
+  const n = APP.raw.sampleIds.length;
+  const groupNames = APP.config.groupNames;
+  const paired = document.querySelector('input[name=pairMode]:checked').value === 'paired';
+  APP.config.paired = paired;
+  let html = `<table class="sample-config-table"><thead><tr>
+    <th>#</th><th>Original ID</th><th>Display Name</th><th>Group</th>
+    ${paired ? '<th>Pair ID</th>' : ''}
+  </tr></thead><tbody>`;
+  for (let i = 0; i < n; i++) {
+    const gSel = groupNames.map((g,gi)=>`<option value="${g}" ${APP.config.groups[i]===g?'selected':''}>${g}</option>`).join('');
+    html += `<tr>
+      <td>${i+1}</td>
+      <td style="color:#64748b;font-size:11px">${APP.raw.sampleIds[i]}</td>
+      <td><input type="text" value="${APP.config.sampleNames[i]||APP.raw.sampleIds[i]}" onchange="APP.config.sampleNames[${i}]=this.value" style="width:130px"></td>
+      <td><select class="group-assign" onchange="APP.config.groups[${i}]=this.value">
+        <option value="">-- Select --</option>${gSel}
+      </select></td>
+      ${paired ? `<td><input type="text" value="${APP.config.pairIds[i]||''}" placeholder="e.g. P1" onchange="APP.config.pairIds[${i}]=this.value" style="width:60px"></td>` : ''}
+    </tr>`;
+  }
+  html += '</tbody></table>';
+  document.getElementById('sampleConfigArea').innerHTML = html;
+  buildClinicalDataTable();
+}
+
+// =====================================================================
+// CLINICAL VARIABLES
+// =====================================================================
+function addClinicalVar() {
+  const name = prompt('Variable name (e.g., Age, BMI, Treatment):');
+  if (!name || !name.trim()) return;
+  APP.config.clinicalVars.push({name:name.trim(), type:'numeric'});
+  APP.config.clinicalData[name.trim()] = new Array(APP.raw.sampleIds.length).fill('');
+  buildClinicalVarDefs();
+  buildClinicalDataTable();
+}
+function buildClinicalVarDefs() {
+  let html = '';
+  APP.config.clinicalVars.forEach((v,i) => {
+    html += `<div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+      <span class="badge badge-blue">${v.name}</span>
+      <select onchange="APP.config.clinicalVars[${i}].type=this.value" style="font-size:12px">
+        <option value="numeric" ${v.type==='numeric'?'selected':''}>Numeric</option>
+        <option value="text" ${v.type==='text'?'selected':''}>Text/Category</option>
+      </select>
+      <button class="btn btn-danger btn-sm" onclick="removeClinicalVar(${i})">✕</button>
+    </div>`;
+  });
+  document.getElementById('clinicalVarDefs').innerHTML = html;
+}
+function removeClinicalVar(i) {
+  const name = APP.config.clinicalVars[i].name;
+  APP.config.clinicalVars.splice(i,1);
+  delete APP.config.clinicalData[name];
+  buildClinicalVarDefs();
+  buildClinicalDataTable();
+}
+function buildClinicalDataTable() {
+  if (!APP.config.clinicalVars.length) { document.getElementById('clinicalDataTable').innerHTML=''; return; }
+  const n = APP.raw.sampleIds.length;
+  let html = `<table class="clinical-table"><thead><tr><th>Sample</th>${APP.config.clinicalVars.map(v=>`<th>${v.name}</th>`).join('')}</tr></thead><tbody>`;
+  for (let i = 0; i < n; i++) {
+    html += `<tr><td style="font-size:11px;color:#475569">${APP.config.sampleNames[i]||APP.raw.sampleIds[i]}</td>`;
+    APP.config.clinicalVars.forEach(v => {
+      const val = APP.config.clinicalData[v.name][i] || '';
+      html += `<td><input type="${v.type==='numeric'?'number':'text'}" value="${val}" onchange="APP.config.clinicalData['${v.name}'][${i}]=this.value" style="width:80px"></td>`;
+    });
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+  document.getElementById('clinicalDataTable').innerHTML = html;
+}
+
+// =====================================================================
+// DATA PROCESSING
+// =====================================================================
+function runProcessing() {
+  const cfg = APP.config;
+  // Validate groups
+  const ungrouped = cfg.groups.filter(g => !g).length;
+  if (ungrouped > 0 && !confirm(`${ungrouped} sample(s) have no group assigned. They will be excluded from analysis. Continue?`)) return;
+
+  showLoading('Running MetaboAnalystR pipeline…', 'Step 1/6: Missing value imputation');
+  setTimeout(() => {
+    try {
+      const log = [];
+      const nS = APP.raw.sampleIds.length;
+      const nF = APP.raw.compounds.length;
+
+      // 1. Build working matrix (samples × features), exclude unassigned
+      const sIdx = cfg.groups.map((g,i) => g ? i : -1).filter(i => i >= 0);
+      const groups = sIdx.map(i => cfg.groups[i]);
+      const names = sIdx.map(i => cfg.sampleNames[i] || APP.raw.sampleIds[i]);
+      let mat = sIdx.map(i => [...APP.raw.matrix[i]]); // [sample][feature]
+      log.push(`Samples included: ${sIdx.length}/${nS}`);
+      log.push(`Features: ${nF}`);
+
+      // 2. Missing value imputation
+      const mvMethod = document.querySelector('input[name=mvMethod]:checked').value;
+      mat = imputeMissing(mat, mvMethod, log);
+
+      // 3. Filter constant features
+      const toKeep = [];
+      for (let j = 0; j < nF; j++) {
+        const col = mat.map(r => r[j]);
+        const mn = Math.min(...col), mx = Math.max(...col);
+        if (mx > mn) toKeep.push(j);
+      }
+      mat = mat.map(r => toKeep.map(j => r[j]));
+      const compounds = toKeep.map(j => APP.raw.compounds[j]);
+      log.push(`Features after constant filter: ${toKeep.length} (removed ${nF - toKeep.length})`);
+
+      // 4. Normalization
+      const normMethod = document.querySelector('input[name=normMethod]:checked').value;
+      mat = normalizeData(mat, normMethod, log);
+
+      // 5. Transformation
+      const transMethod = document.querySelector('input[name=transMethod]:checked').value;
+      mat = transformData(mat, transMethod, log);
+
+      // 6. Scaling
+      const scaleMethod = document.querySelector('input[name=scaleMethod]:checked').value;
+      const scaledMat = scaleData(mat, scaleMethod, log);
+
+      APP.processed = { mat, scaledMat, groups, names, sIdx, compounds };
+      log.push('✅ Processing complete');
+      document.getElementById('processingLog').textContent = log.join('\n');
+
+      // 7. Statistical analysis
+      updateLoading('Step 5/6: Statistical analysis…');
+      setTimeout(() => {
+        APP.results = runStatistics(APP.processed, log);
+        log.push(`Significant features (FDR<${APP.processing.pThresh}): ${APP.results.filter(r=>r.fdr<APP.processing.pThresh).length}`);
+        document.getElementById('processingLog').textContent = log.join('\n');
+
+        // 8. Multivariate
+        updateLoading('Step 6/6: Multivariate analysis…');
+        setTimeout(() => {
+          APP.pca = computePCA(APP.processed.scaledMat, APP.processed.groups);
+          APP.plsda = computePLSDA(APP.processed.scaledMat, APP.processed.groups, APP.processed.compounds);
+          APP.nmds = computeNMDS(APP.processed.scaledMat);
+          hideLoading();
+          document.getElementById('toStep4Btn').style.display='inline-block';
+          log.push('✅ Multivariate analysis complete');
+          document.getElementById('processingLog').textContent = log.join('\n');
+        }, 100);
+      }, 100);
+    } catch(err) {
+      hideLoading();
+      alert('Processing error: ' + err.message);
+      console.error(err);
+    }
+  }, 100);
+}
+
+function imputeMissing(mat, method, log) {
+  const nS = mat.length, nF = mat[0].length;
+  let imputed = 0;
+  // Find global minimum
+  let gmin = Infinity;
+  for (let i=0;i<nS;i++) for (let j=0;j<nF;j++) if (mat[i][j]!==null && mat[i][j]>0) gmin=Math.min(gmin,mat[i][j]);
+  if (!isFinite(gmin)) gmin = 1;
+
+  for (let j = 0; j < nF; j++) {
+    const col = mat.map(r => r[j]);
+    const valid = col.filter(v => v !== null && v > 0);
+    const mn = valid.length ? Math.min(...valid) : gmin;
+    const med = valid.length ? median(valid) : gmin;
+    for (let i = 0; i < nS; i++) {
+      if (mat[i][j] === null || mat[i][j] <= 0) {
+        if (method==='min5') mat[i][j] = mn / 5;
+        else if (method==='min') mat[i][j] = mn;
+        else if (method==='median') mat[i][j] = med;
+        else if (method==='knn') mat[i][j] = mn / 5; // simplified KNN fallback
+        else mat[i][j] = mn / 5;
+        imputed++;
+      }
+    }
+  }
+  log.push(`Missing values imputed: ${imputed} (method: ${method})`);
+  return mat;
+}
+
+function normalizeData(mat, method, log) {
+  if (method==='none') { log.push('Normalization: none'); return mat; }
+  const nS = mat.length;
+  if (method==='sum') {
+    mat = mat.map(row => {
+      const s = row.reduce((a,b)=>a+b,0);
+      return s>0 ? row.map(v=>v/s*1e6) : row;
+    });
+    log.push('Normalization: sum (×1e6)');
+  } else if (method==='median') {
+    mat = mat.map(row => {
+      const m = median(row);
+      return m>0 ? row.map(v=>v/m) : row;
+    });
+    log.push('Normalization: median');
+  } else if (method==='quantile') {
+    mat = quantileNorm(mat);
+    log.push('Normalization: quantile');
+  }
+  return mat;
+}
+
+function quantileNorm(mat) {
+  const nS = mat.length, nF = mat[0].length;
+  // Sort each row and average across same rank
+  const sorted = mat.map(row => [...row].sort((a,b)=>a-b));
+  const rankMeans = Array(nF).fill(0);
+  for (let j=0;j<nF;j++) { for(let i=0;i<nS;i++) rankMeans[j]+=sorted[i][j]; rankMeans[j]/=nS; }
+  return mat.map(row => {
+    const order = row.map((v,i)=>({v,i})).sort((a,b)=>a.v-b.v);
+    const result = new Array(nF);
+    order.forEach((o,rank) => result[o.i]=rankMeans[rank]);
+    return result;
+  });
+}
+
+function transformData(mat, method, log) {
+  if (method==='none') { log.push('Transformation: none'); return mat; }
+  const fn = method==='log2' ? v=>Math.log2(v+1) : method==='log10' ? v=>Math.log10(v+1) : v=>Math.sqrt(v);
+  log.push(`Transformation: ${method}`);
+  return mat.map(row => row.map(fn));
+}
+
+function scaleData(mat, method, log) {
+  if (method==='none') { log.push('Scaling: none'); return mat; }
+  const nS=mat.length, nF=mat[0].length;
+  const result = mat.map(r=>[...r]);
+  for (let j=0;j<nF;j++) {
+    const col = mat.map(r=>r[j]);
+    const m = mean(col), s = std(col);
+    if (method==='auto') {
+      result.forEach((r,i) => r[j] = s>0 ? (mat[i][j]-m)/s : 0);
+    } else if (method==='pareto') {
+      result.forEach((r,i) => r[j] = s>0 ? (mat[i][j]-m)/Math.sqrt(s) : 0);
+    } else if (method==='range') {
+      const mn=Math.min(...col), mx=Math.max(...col);
+      result.forEach((r,i) => r[j] = mx>mn ? (mat[i][j]-mn)/(mx-mn) : 0);
+    }
+  }
+  log.push(`Scaling: ${method}`);
+  return result;
+}
+
+// =====================================================================
+// STATISTICS
+// =====================================================================
+function runStatistics(proc, log) {
+  const {mat, scaledMat, groups, names, compounds} = proc;
+  const pThresh = parseFloat(document.getElementById('pThresh').value) || 0.05;
+  const fcThresh = parseFloat(document.getElementById('fcThresh').value) || 1.0;
+  const fdrMethod = document.getElementById('fdrMethod').value;
+  APP.processing.pThresh = pThresh;
+  APP.processing.fcThresh = fcThresh;
+
+  const groupSet = [...new Set(groups)];
+  const nF = compounds.length;
+  const nGroups = groupSet.length;
+  const paired = APP.config.paired;
+  const statTest = document.getElementById('statTest').value;
+
+  // Determine test
+  let testFn;
+  if (nGroups === 2) {
+    if (statTest==='auto' || statTest==='ttest') testFn = paired ? pairedTTest : welchTTest;
+    else if (statTest==='mann_whitney') testFn = mannWhitneyU;
+    else if (statTest==='paired_ttest') testFn = pairedTTest;
+    else if (statTest==='wilcoxon') testFn = wilcoxonSignedRank;
+    else testFn = welchTTest;
+  } else {
+    if (statTest==='auto' || statTest==='anova') testFn = oneWayANOVA;
+    else testFn = kruskalWallis;
+  }
+
+  const pvals = [];
+  const results = [];
+
+  for (let j = 0; j < nF; j++) {
+    const byGroup = {};
+    groupSet.forEach(g => byGroup[g] = []);
+    groups.forEach((g,i) => byGroup[g].push(mat[i][j]));
+
+    let p = 1, stat = 0, fc = 0, means = {};
+    groupSet.forEach(g => means[g] = mean(byGroup[g]));
+
+    try {
+      if (nGroups === 2) {
+        const g1 = groupSet[0], g2 = groupSet[1];
+        if (paired) {
+          const pairs = buildPairs(groups, mat.map(r=>r[j]), APP.config.pairIds, g1, g2);
+          p = testFn(pairs.x, pairs.y);
+        } else {
+          p = testFn(byGroup[g1], byGroup[g2]);
+        }
+        fc = means[g2] - means[g1]; // log2 fold change (already log-transformed)
+        stat = fc;
+      } else {
+        p = testFn(groupSet.map(g=>byGroup[g]));
+        fc = 0;
+      }
+    } catch(e) { p = 1; }
+
+    const sds = {};
+    groupSet.forEach(g => sds[g] = std(byGroup[g]));
+
+    pvals.push(p);
+    results.push({
+      idx: j,
+      name: compounds[j].name,
+      group: compounds[j].group,
+      cas: compounds[j].cas,
+      transition: compounds[j].transition,
+      pvalue: p,
+      fc: fc,
+      means, sds,
+      byGroup
+    });
+  }
+
+  // FDR correction
+  const fdrs = correctFDR(pvals, fdrMethod);
+  results.forEach((r,i) => {
+    r.fdr = fdrs[i];
+    r.significant = r.fdr < pThresh && (nGroups > 2 || Math.abs(r.fc) >= fcThresh);
+  });
+
+  log.push(`Test: ${testFn.name || 'auto'}, FDR: ${fdrMethod}`);
+  return results;
+}
+
+function buildPairs(groups, vals, pairIds, g1, g2) {
+  const map1 = {}, map2 = {};
+  groups.forEach((g,i) => {
+    const pid = pairIds[i] || i;
+    if (g===g1) map1[pid]=vals[i];
+    else if (g===g2) map2[pid]=vals[i];
+  });
+  const x=[], y=[];
+  Object.keys(map1).forEach(pid => { if (map2[pid]!==undefined) { x.push(map1[pid]); y.push(map2[pid]); }});
+  return {x, y};
+}
+
+function welchTTest(x, y) {
+  const n1=x.length, n2=y.length;
+  if (n1<2||n2<2) return 1;
+  const m1=mean(x), m2=mean(y);
+  const v1=variance(x), v2=variance(y);
+  const se = Math.sqrt(v1/n1 + v2/n2);
+  if (se===0) return 1;
+  const t = (m1-m2)/se;
+  const df = Math.pow(v1/n1+v2/n2,2)/(Math.pow(v1/n1,2)/(n1-1)+Math.pow(v2/n2,2)/(n2-1));
+  return 2*tDist(Math.abs(t),df);
+}
+
+function pairedTTest(x, y) {
+  if (!y) return 1; // handle when called differently
+  const n=x.length; if(n<2) return 1;
+  const diff = x.map((v,i)=>v-y[i]);
+  const d=mean(diff), s=std(diff);
+  if (s===0) return 1;
+  const t=d/(s/Math.sqrt(n));
+  return 2*tDist(Math.abs(t),n-1);
+}
+
+function mannWhitneyU(x, y) {
+  const n1=x.length, n2=y.length;
+  let U=0;
+  x.forEach(a => y.forEach(b => { if(a>b) U++; else if(a===b) U+=0.5; }));
+  const mu=n1*n2/2, sigma=Math.sqrt(n1*n2*(n1+n2+1)/12);
+  const z=(U-mu)/sigma;
+  return 2*(1-normCDF(Math.abs(z)));
+}
+
+function wilcoxonSignedRank(x, y) {
+  const n=x.length;
+  const diff=x.map((v,i)=>v-y[i]).filter(d=>d!==0);
+  const nd=diff.length;
+  if (nd===0) return 1;
+  const sorted=[...diff].sort((a,b)=>Math.abs(a)-Math.abs(b));
+  let Wplus=0;
+  sorted.forEach((d,i)=>{ if(d>0) Wplus+=(i+1); });
+  const mu=nd*(nd+1)/4, sigma=Math.sqrt(nd*(nd+1)*(2*nd+1)/24);
+  const z=(Wplus-mu)/sigma;
+  return 2*(1-normCDF(Math.abs(z)));
+}
+
+function oneWayANOVA(groupVals) {
+  const allVals=[].concat(...groupVals);
+  const gm=mean(allVals);
+  const k=groupVals.length;
+  const N=allVals.length;
+  let ssBetween=0, ssWithin=0;
+  groupVals.forEach(g => {
+    const gm2=mean(g);
+    ssBetween+=g.length*Math.pow(gm2-gm,2);
+    g.forEach(v => ssWithin+=Math.pow(v-gm2,2));
+  });
+  const dfB=k-1, dfW=N-k;
+  if (dfW<=0||ssWithin===0) return 1;
+  const F=(ssBetween/dfB)/(ssWithin/dfW);
+  return fDistPValue(F,dfB,dfW);
+}
+
+function kruskalWallis(groupVals) {
+  const all=[].concat(...groupVals);
+  const n=all.length, k=groupVals.length;
+  const sorted=[...all].sort((a,b)=>a-b);
+  const rankMap={};
+  sorted.forEach((v,i) => rankMap[v]=(rankMap[v]||[]).concat(i+1));
+  const avgRank={};
+  Object.keys(rankMap).forEach(v => {
+    const ranks=rankMap[v]; avgRank[v]=ranks.reduce((a,b)=>a+b,0)/ranks.length;
+  });
+  let H=0;
+  groupVals.forEach(g => {
+    const ni=g.length;
+    const Ri=g.reduce((a,v)=>a+avgRank[v],0);
+    H+=Math.pow(Ri,2)/ni;
+  });
+  H=12/(n*(n+1))*H-3*(n+1);
+  return 1-chiSquareCDF(H,k-1);
+}
+
+function correctFDR(pvals, method) {
+  const n=pvals.length;
+  if (method==='none') return [...pvals];
+  if (method==='bonferroni') return pvals.map(p=>Math.min(p*n,1));
+  // BH
+  const indexed=pvals.map((p,i)=>({p,i})).sort((a,b)=>a.p-b.p);
+  const q=Array(n); let minQ=1;
+  for (let k=n-1;k>=0;k--) {
+    const qi=Math.min(indexed[k].p*n/(k+1),minQ);
+    minQ=qi; q[indexed[k].i]=qi;
+  }
+  return q;
+}
+
+// =====================================================================
+// ANALYSIS RENDERING
+// =====================================================================
+function showAnalysisTab(id, el) {
+  document.querySelectorAll('#step4 .tab-content').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('#step4 .tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  el.classList.add('active');
+  if (id==='volcanoTab') renderVolcano();
+  if (id==='foldChangeTab') renderFoldChange();
+  if (id==='classBreakdown') renderClassBreakdown();
+}
+
+function renderAnalysis() {
+  const res = APP.results;
+  const sig = res.filter(r=>r.significant);
+  const pThresh = APP.processing.pThresh;
+  const groupSet = [...new Set(APP.processed.groups)];
+
+  document.getElementById('analysisOverview').innerHTML = `
+    <div class="row">
+      <div class="col" style="text-align:center;background:#eff6ff;border-radius:8px;padding:10px">
+        <div style="font-size:2rem;font-weight:700;color:#2563a8">${res.length}</div>
+        <div style="color:#64748b;font-size:12px">Total features</div>
+      </div>
+      <div class="col" style="text-align:center;background:#f0fdf4;border-radius:8px;padding:10px">
+        <div style="font-size:2rem;font-weight:700;color:#16a34a">${sig.length}</div>
+        <div style="color:#64748b;font-size:12px">Significant (FDR&lt;${pThresh})</div>
+      </div>
+      <div class="col" style="text-align:center;background:#fef2f2;border-radius:8px;padding:10px">
+        <div style="font-size:2rem;font-weight:700;color:#dc2626">${sig.filter(r=>r.fc>0).length}</div>
+        <div style="color:#64748b;font-size:12px">Up-regulated</div>
+      </div>
+      <div class="col" style="text-align:center;background:#fffbeb;border-radius:8px;padding:10px">
+        <div style="font-size:2rem;font-weight:700;color:#d97706">${sig.filter(r=>r.fc<0).length}</div>
+        <div style="color:#64748b;font-size:12px">Down-regulated</div>
+      </div>
+    </div>`;
+
+  renderSigTable();
+}
+
+function renderSigTable() {
+  const res = APP.results;
+  const sig = res.filter(r=>r.significant).sort((a,b)=>a.fdr-b.fdr);
+  const all = [...res].sort((a,b)=>a.pvalue-b.pvalue);
+  const groupSet = [...new Set(APP.processed.groups)];
+
+  let html = `<div style="margin-bottom:8px;display:flex;gap:8px;align-items:center">
+    <span class="badge badge-green">Significant only: ${sig.length}</span>
+    <span class="badge badge-blue">All: ${res.length}</span>
+    <label style="display:flex;align-items:center;gap:4px;font-weight:400">
+      <input type="checkbox" id="showAllFeatures" onchange="renderSigTable()"> Show all features
+    </label>
+  </div>`;
+
+  const toShow = document.getElementById('showAllFeatures')?.checked ? all.slice(0,500) : sig;
+  if (!toShow.length) { html += '<div class="alert alert-warning">No significant features at current thresholds.</div>'; }
+  else {
+    html += `<div style="overflow-x:auto;max-height:500px;overflow-y:auto">
+    <table class="stats-table"><thead><tr>
+      <th>#</th><th>Name</th><th>Class</th>
+      ${groupSet.map(g=>`<th>Mean(${g})</th><th>SD(${g})</th>`).join('')}
+      <th>Log2FC</th><th>p-value</th><th>FDR (BH)</th><th>Sig</th>
+    </tr></thead><tbody>`;
+    toShow.slice(0,1000).forEach((r,i) => {
+      const cls = r.significant ? 'sig' : '';
+      html += `<tr class="${cls}">
+        <td>${i+1}</td>
+        <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.name}">${r.name}</td>
+        <td><span class="badge badge-gray">${r.group||'-'}</span></td>
+        ${groupSet.map(g=>`<td>${(r.means[g]||0).toFixed(3)}</td><td>${(r.sds[g]||0).toFixed(3)}</td>`).join('')}
+        <td style="color:${r.fc>0?'#dc2626':'#2563a8'}">${r.fc.toFixed(3)}</td>
+        <td>${r.pvalue.toExponential(2)}</td>
+        <td>${r.fdr.toExponential(2)}</td>
+        <td>${r.significant ? '<span class="badge badge-red">✓</span>' : ''}</td>
+      </tr>`;
+    });
+    html += '</tbody></table></div>';
+  }
+  document.getElementById('sigTableContent').innerHTML = html;
+}
+
+function renderVolcano() {
+  const res = APP.results;
+  const pThresh = APP.processing.pThresh;
+  const fcThresh = APP.processing.fcThresh;
+  const xs = res.map(r=>r.fc);
+  const ys = res.map(r=>-Math.log10(r.pvalue+1e-300));
+  const colors = res.map(r => r.significant ? (r.fc>0?'#dc2626':'#2563a8') : '#94a3b8');
+  const sizes = res.map(r => r.significant ? 7 : 4);
+
+  const trace = { x:xs, y:ys, mode:'markers', type:'scattergl',
+    marker:{color:colors,size:sizes,opacity:0.7},
+    text:res.map(r=>r.name), hovertemplate:'<b>%{text}</b><br>Log2FC: %{x:.3f}<br>-log10p: %{y:.3f}<extra></extra>'
+  };
+  const layout = {
+    xaxis:{title:'Log2 Fold Change',zeroline:true},
+    yaxis:{title:'-Log10(p-value)'},
+    title:'Volcano Plot',
+    shapes:[
+      {type:'line',x0:-fcThresh,x1:-fcThresh,y0:0,y1:1,yref:'paper',line:{dash:'dash',color:'#94a3b8'}},
+      {type:'line',x0:fcThresh,x1:fcThresh,y0:0,y1:1,yref:'paper',line:{dash:'dash',color:'#94a3b8'}},
+      {type:'line',x0:-10,x1:10,y0:-Math.log10(pThresh),y1:-Math.log10(pThresh),line:{dash:'dash',color:'#94a3b8'}}
+    ],
+    margin:{t:40,b:60,l:60,r:20}
+  };
+  Plotly.newPlot('volcanoPlot',[trace],layout,{responsive:true});
+}
+
+function renderFoldChange() {
+  const res = APP.results.filter(r=>r.significant).sort((a,b)=>b.fc-a.fc);
+  const n = Math.min(res.length, 30);
+  const top = res.slice(0,Math.ceil(n/2)).concat(res.slice(-Math.floor(n/2)));
+
+  const trace = {
+    y: top.map(r=>r.name.length>30?r.name.slice(0,30)+'…':r.name),
+    x: top.map(r=>r.fc),
+    type:'bar', orientation:'h',
+    marker:{color:top.map(r=>r.fc>0?'#dc2626':'#2563a8')}
+  };
+  Plotly.newPlot('fcPlot',[trace],{
+    title:'Log2 Fold Change (Top/Bottom significant features)',
+    xaxis:{title:'Log2FC'}, margin:{l:220,t:40,b:60,r:20},
+    height:Math.max(400, top.length*22)
+  },{responsive:true});
+}
+
+function renderClassBreakdown() {
+  const res = APP.results;
+  const classes = {};
+  res.forEach(r => {
+    const g = r.group || 'Unknown';
+    if (!classes[g]) classes[g]={total:0,sig:0};
+    classes[g].total++;
+    if (r.significant) classes[g].sig++;
+  });
+  const sortedClasses = Object.keys(classes).sort((a,b)=>classes[b].sig-classes[a].sig);
+  const trace1 = {x:sortedClasses, y:sortedClasses.map(g=>classes[g].total), name:'Total', type:'bar', marker:{color:'#94a3b8'}};
+  const trace2 = {x:sortedClasses, y:sortedClasses.map(g=>classes[g].sig), name:'Significant', type:'bar', marker:{color:'#dc2626'}};
+  Plotly.newPlot('classBreakdownPlot',[trace1,trace2],{
+    barmode:'overlay', title:'Significant features by class',
+    xaxis:{tickangle:-45}, yaxis:{title:'Count'},
+    margin:{t:40,b:120,l:60,r:20}
+  },{responsive:true});
+}
+
+// =====================================================================
+// PCA
+// =====================================================================
+function computePCA(scaledMat, groups) {
+  const nS = scaledMat.length, nF = scaledMat[0].length;
+  // Center data (already scaled, but center per feature again)
+  const centered = scaledMat.map(r=>[...r]);
+  for (let j=0;j<nF;j++) {
+    const m=mean(centered.map(r=>r[j]));
+    centered.forEach(r=>r[j]-=m);
+  }
+  // C = X*X^T / (nS-1)  [nS×nS]
+  const C = Array.from({length:nS}, (_,i) =>
+    Array.from({length:nS}, (_,k) => {
+      let s=0; for(let j=0;j<nF;j++) s+=centered[i][j]*centered[k][j];
+      return s/(nS-1);
+    })
+  );
+  // Power iteration for top 10 PCs
+  const nPC = Math.min(10, nS-1);
+  const eigVecs = [], eigVals = [];
+  let deflated = C.map(r=>[...r]);
+  for (let pc=0; pc<nPC; pc++) {
+    let v = Array(nS).fill(0); v[pc%nS]=1;
+    for (let iter=0;iter<200;iter++) {
+      const w = matVec(deflated,v);
+      const norm = Math.sqrt(w.reduce((a,b)=>a+b*b,0));
+      if (norm<1e-12) break;
+      const newV = w.map(x=>x/norm);
+      if (vecDist(newV,v)<1e-8) { v=newV; break; }
+      v=newV;
+    }
+    const lambda = vecDot(v, matVec(deflated,v));
+    eigVecs.push(v); eigVals.push(Math.max(0,lambda));
+    // Deflate
+    deflated = deflated.map((row,i)=>row.map((val,k)=>val-lambda*v[i]*v[k]));
+  }
+  const totalVar = eigVals.reduce((a,b)=>a+b,0);
+  const explainedVar = eigVals.map(l=>totalVar>0?100*l/totalVar:0);
+  // Kernel PCA scores: eigVecs are nS-dimensional (sample space).
+  // Score for sample i on PC k = sqrt(lambda_k * (nS-1)) * eigVec_k[i]
+  const scores = eigVecs.map((ev, pcIdx) => {
+    const scale = Math.sqrt(Math.max(0, eigVals[pcIdx]) * Math.max(1, nS - 1));
+    return ev.map(vi => vi * scale);
+  });
+  return {scores, explainedVar, eigVals, eigVecs, groups};
+}
+
+function renderPCA() {
+  if (!APP.pca) return;
+  const {scores, explainedVar, groups} = APP.pca;
+  const pcX = parseInt(document.getElementById('pcX').value);
+  const pcY = parseInt(document.getElementById('pcY').value);
+  const groupSet = [...new Set(groups)];
+  const names = APP.processed.names;
+
+  const traces = groupSet.map((g,gi) => {
+    const idx = groups.map((gr,i)=>gr===g?i:-1).filter(i=>i>=0);
+    return {
+      x: idx.map(i=>scores[pcX][i]),
+      y: idx.map(i=>scores[pcY][i]),
+      text: idx.map(i=>names[i]),
+      mode:'markers+text', type:'scatter', name:g,
+      textposition:'top center', textfont:{size:9},
+      marker:{size:10, color:COLORS[gi%COLORS.length], opacity:0.85,
+        line:{color:'#fff',width:1}}
+    };
+  });
+
+  Plotly.newPlot('pcaPlot', traces, {
+    title:`PCA Score Plot (PC${pcX+1} vs PC${pcY+1})`,
+    xaxis:{title:`PC${pcX+1} (${explainedVar[pcX].toFixed(1)}%)`},
+    yaxis:{title:`PC${pcY+1} (${explainedVar[pcY].toFixed(1)}%)`},
+    margin:{t:50,b:60,l:60,r:20}
+  },{responsive:true});
+
+  // Scree plot
+  const nShow = Math.min(10, explainedVar.length);
+  Plotly.newPlot('pcaScree', [
+    {x:Array.from({length:nShow},(_,i)=>`PC${i+1}`), y:explainedVar.slice(0,nShow),
+     type:'bar', marker:{color:'#2563a8'}, name:'Explained'},
+    {x:Array.from({length:nShow},(_,i)=>`PC${i+1}`),
+     y:explainedVar.slice(0,nShow).reduce((acc,v)=>{acc.push((acc[acc.length-1]||0)+v);return acc;},[]),
+     type:'scatter', mode:'lines+markers', marker:{color:'#dc2626'}, name:'Cumulative',yaxis:'y2'}
+  ], {
+    title:'Scree Plot', barmode:'group',
+    yaxis:{title:'Explained Variance (%)'},
+    yaxis2:{title:'Cumulative (%)', overlaying:'y', side:'right', range:[0,105]},
+    margin:{t:40,b:60,l:60,r:60}
+  },{responsive:true});
+}
+
+// =====================================================================
+// PLS-DA & VIP
+// =====================================================================
+function computePLSDA(scaledMat, groups, compounds) {
+  const groupSet = [...new Set(groups)];
+  const nS = scaledMat.length, nF = scaledMat[0].length;
+  const nComp = Math.min(5, nS-1, groupSet.length*2);
+
+  // Encode Y (one-hot or dummy)
+  const Y = scaledMat.map((_,i) => {
+    const idx = groupSet.indexOf(groups[i]);
+    return groupSet.map((_,gi) => gi===idx ? 1 : 0);
+  });
+
+  // NIPALS PLS
+  const X = scaledMat.map(r=>[...r]);
+  const Ymat = Y.map(r=>[...r]);
+  const T=[], P=[], W=[], Q=[], Wstar=[];
+
+  for (let comp=0; comp<nComp; comp++) {
+    // Initialize u with first column of Y
+    let u = Ymat.map(r=>r[0]);
+    let t_old = new Array(nS).fill(0);
+    let w, t, q, p;
+    for (let iter=0; iter<100; iter++) {
+      // w = X'u / ||X'u||
+      w = Array(nF).fill(0);
+      for (let j=0;j<nF;j++) { for(let i=0;i<nS;i++) w[j]+=X[i][j]*u[i]; }
+      const wn=Math.sqrt(w.reduce((a,b)=>a+b*b,0));
+      if (wn<1e-12) break;
+      w=w.map(v=>v/wn);
+      // t = Xw
+      t = X.map(row=>vecDot(row,w));
+      // q = Y't / ||Y't||
+      q = Array(groupSet.length).fill(0);
+      for (let k=0;k<groupSet.length;k++) for(let i=0;i<nS;i++) q[k]+=Ymat[i][k]*t[i];
+      const qn=Math.sqrt(q.reduce((a,b)=>a+b*b,0));
+      if (qn<1e-12) break;
+      q=q.map(v=>v/qn);
+      // u = Yq
+      u = Ymat.map(row=>vecDot(row,q));
+      if (vecDist(t,t_old)<1e-6) break;
+      t_old=[...t];
+    }
+    // p = X't / t't
+    const tt = vecDot(t,t);
+    p = Array(nF).fill(0);
+    for (let j=0;j<nF;j++) for(let i=0;i<nS;i++) p[j]+=X[i][j]*t[i];
+    p=p.map(v=>v/(tt||1));
+    // Deflate X
+    for(let i=0;i<nS;i++) for(let j=0;j<nF;j++) X[i][j]-=t[i]*p[j];
+    // Deflate Y
+    for(let i=0;i<nS;i++) for(let k=0;k<groupSet.length;k++) Ymat[i][k]-=t[i]*q[k];
+
+    T.push(t); P.push(p); W.push(w); Q.push(q);
+  }
+
+  // VIP scores
+  const SSY = T.map((t,comp) => {
+    const tt=vecDot(t,t);
+    return Q[comp].reduce((a,q)=>a+q*q,0)*tt;
+  });
+  const totalSSY = SSY.reduce((a,b)=>a+b,0);
+  const nComp2 = T.length;
+
+  const vip = Array(nF).fill(0);
+  for (let j=0;j<nF;j++) {
+    let s=0;
+    for (let comp=0;comp<nComp2;comp++) {
+      s+=SSY[comp]*W[comp][j]*W[comp][j];
+    }
+    vip[j]=Math.sqrt(nF*s/(totalSSY||1));
+  }
+
+  const scores = T[0]||[], scores2 = T[1]||T[0]||[];
+  return {scores, scores2, vip, groups, groupSet};
+}
+
+function renderPLSDA() {
+  if (!APP.plsda) return;
+  const {scores, scores2, vip, groups, groupSet} = APP.plsda;
+  const names = APP.processed.names;
+
+  // Score plot
+  const traces = groupSet.map((g,gi) => {
+    const idx = groups.map((gr,i)=>gr===g?i:-1).filter(i=>i>=0);
+    return {
+      x:idx.map(i=>scores[i]||0), y:idx.map(i=>scores2[i]||0),
+      text:idx.map(i=>names[i]),
+      mode:'markers+text', type:'scatter', name:g,
+      textposition:'top center', textfont:{size:9},
+      marker:{size:10,color:COLORS[gi%COLORS.length],opacity:0.85,line:{color:'#fff',width:1}}
+    };
+  });
+  Plotly.newPlot('plsdaScorePlot', traces, {
+    title:'PLS-DA Score Plot (LV1 vs LV2)',
+    xaxis:{title:'LV1'}, yaxis:{title:'LV2'},
+    margin:{t:50,b:60,l:60,r:20}
+  },{responsive:true});
+
+  // VIP plot - top 20
+  const sortedVIP = vip.map((v,i)=>({v,i})).sort((a,b)=>b.v-a.v);
+  const top20 = sortedVIP.slice(0,20);
+  Plotly.newPlot('vipPlot',[{
+    y:top20.map(d=>APP.processed.compounds[d.i].name.length>30?APP.processed.compounds[d.i].name.slice(0,30)+'…':APP.processed.compounds[d.i].name),
+    x:top20.map(d=>d.v), type:'bar', orientation:'h',
+    marker:{color:top20.map(d=>d.v>=1?'#dc2626':'#94a3b8')},
+    hovertext:top20.map(d=>APP.processed.compounds[d.i].name), hoverinfo:'text+x'
+  },{
+    x:[1,1], y:[top20[top20.length-1].v.toString(), top20[0].v.toString()],
+    type:'scatter', mode:'lines', line:{color:'#dc2626',dash:'dash'}, name:'VIP=1'
+  }],{
+    title:'VIP Scores (Top 20)', xaxis:{title:'VIP Score'},
+    margin:{l:200,t:40,b:60,r:20},
+    shapes:[{type:'line',x0:1,x1:1,y0:0,y1:1,yref:'paper',line:{dash:'dash',color:'#dc2626'}}]
+  },{responsive:true});
+}
+
+// =====================================================================
+// NMDS
+// =====================================================================
+function computeNMDS(scaledMat, nDim=2, maxIter=1000) {
+  const nS = scaledMat.length;
+  // Bray-Curtis distance matrix
+  const dist = Array.from({length:nS}, (_,i) =>
+    Array.from({length:nS}, (_,k) => {
+      if (i===k) return 0;
+      let num=0, den=0;
+      scaledMat[i].forEach((v,j) => { num+=Math.abs(v-scaledMat[k][j]); den+=Math.abs(v)+Math.abs(scaledMat[k][j]); });
+      return den>0 ? num/den : 0;
+    })
+  );
+
+  // Random init
+  const rng = () => Math.random()*2-1;
+  let pos = Array.from({length:nS}, ()=>[rng(),rng()]);
+
+  // Gradient descent NMDS
+  let stress = Infinity;
+  const dObs = dist;
+  for (let iter=0; iter<maxIter; iter++) {
+    // Current distances
+    const dCur = Array.from({length:nS}, (_,i) =>
+      Array.from({length:nS}, (_,k) => {
+        if (i===k) return 0;
+        const dx=pos[i][0]-pos[k][0], dy=pos[i][1]-pos[k][1];
+        return Math.sqrt(dx*dx+dy*dy)+1e-10;
+      })
+    );
+    // Shepard's isotonic regression (simplified: linear monotone)
+    let num=0, den=0;
+    for(let i=0;i<nS;i++) for(let k=i+1;k<nS;k++) {
+      num+=dObs[i][k]*dCur[i][k]; den+=dCur[i][k]*dCur[i][k];
+    }
+    const scale = den>0 ? num/den : 1;
+    // Stress
+    let ss=0, sd=0;
+    for(let i=0;i<nS;i++) for(let k=i+1;k<nS;k++) {
+      const d_hat=dObs[i][k]*scale, d_cur=dCur[i][k];
+      ss+=Math.pow(d_cur-d_hat,2); sd+=d_hat*d_hat;
+    }
+    const newStress = sd>0 ? Math.sqrt(ss/sd) : 0;
+    if (Math.abs(stress-newStress)<1e-5 && iter>50) { stress=newStress; break; }
+    stress=newStress;
+    // Gradient step
+    const lr=0.01/(iter*0.01+1);
+    const grad=Array.from({length:nS},()=>[0,0]);
+    for(let i=0;i<nS;i++) for(let k=i+1;k<nS;k++) {
+      const d_hat=dObs[i][k]*scale, d_cur=dCur[i][k];
+      const err=(d_cur-d_hat)/d_cur;
+      const dx=(pos[i][0]-pos[k][0])*err;
+      const dy=(pos[i][1]-pos[k][1])*err;
+      grad[i][0]+=dx; grad[i][1]+=dy;
+      grad[k][0]-=dx; grad[k][1]-=dy;
+    }
+    pos=pos.map((p,i)=>[p[0]-lr*grad[i][0], p[1]-lr*grad[i][1]]);
+  }
+  return {positions:pos, stress, groups:APP.processed.groups};
+}
+
+function renderNMDS() {
+  if (!APP.nmds) return;
+  const {positions, stress, groups} = APP.nmds;
+  const groupSet=[...new Set(groups)];
+  const names=APP.processed.names;
+  const traces=groupSet.map((g,gi)=>{
+    const idx=groups.map((gr,i)=>gr===g?i:-1).filter(i=>i>=0);
+    return {x:idx.map(i=>positions[i][0]),y:idx.map(i=>positions[i][1]),
+      text:idx.map(i=>names[i]),mode:'markers+text',type:'scatter',name:g,
+      textposition:'top center',textfont:{size:9},
+      marker:{size:10,color:COLORS[gi%COLORS.length],opacity:0.85,line:{color:'#fff',width:1}}};
+  });
+  Plotly.newPlot('nmdsPlot',traces,{
+    title:'NMDS Ordination (Bray-Curtis distance)',
+    xaxis:{title:'NMDS1'},yaxis:{title:'NMDS2'},
+    margin:{t:50,b:60,l:60,r:20}
+  },{responsive:true});
+  document.getElementById('nmdsStress').textContent=`Stress: ${stress.toFixed(4)} (${stress<0.05?'Excellent':stress<0.1?'Good':stress<0.2?'Acceptable':'Poor'})`;
+}
+
+// =====================================================================
+// HEATMAP
+// =====================================================================
+function renderHeatmap() {
+  const n = parseInt(document.getElementById('heatmapN').value)||50;
+  const rank = document.getElementById('heatmapRank').value;
+  if (!APP.results || !APP.processed) return;
+
+  let sorted = [...APP.results];
+  if (rank==='pvalue') sorted.sort((a,b)=>a.pvalue-b.pvalue);
+  else if (rank==='fc') sorted.sort((a,b)=>Math.abs(b.fc)-Math.abs(a.fc));
+  else if (rank==='vip' && APP.plsda) {
+    const vipMap={};
+    APP.plsda.vip.forEach((v,i)=>vipMap[APP.processed.compounds[i].name]=v);
+    sorted.sort((a,b)=>(vipMap[b.name]||0)-(vipMap[a.name]||0));
+  }
+  const top = sorted.slice(0,n);
+  const featureIdx = top.map(r=>r.idx);
+  const mat = APP.processed.scaledMat;
+  const z = featureIdx.map(fi=>mat.map(row=>row[fi]));
+  const featureNames = top.map(r=>r.name.length>35?r.name.slice(0,35)+'…':r.name);
+  const sampleNames = APP.processed.names;
+
+  Plotly.newPlot('heatmapPlot',[{
+    z, x:sampleNames, y:featureNames, type:'heatmap',
+    colorscale:'RdBu', reversescale:true,
+    colorbar:{title:'Z-score',len:0.8}
+  }],{
+    title:`Heatmap (Top ${n} features, ${rank} ranked)`,
+    xaxis:{tickangle:-45,tickfont:{size:9}},
+    yaxis:{tickfont:{size:9}},
+    margin:{l:250,t:60,b:130,r:100},
+    height:Math.max(500, n*14+200)
+  },{responsive:true});
+}
+
+// =====================================================================
+// BOX / VIOLIN
+// =====================================================================
+function populateFeatureSelects() {
+  if (!APP.results) return;
+  const sig = APP.results.filter(r=>r.significant).sort((a,b)=>a.fdr-b.fdr);
+  const opts = sig.map(r=>`<option value="${r.idx}">${r.name}</option>`).join('');
+  ['boxFeatureSelect','barFeatureSelect'].forEach(id=>{
+    const el=document.getElementById(id);
+    if (el) { el.innerHTML=opts; }
+  });
+  if (sig.length) { renderBoxViolin(); renderBar(); }
+}
+
+function renderBoxViolin() {
+  const fi = parseInt(document.getElementById('boxFeatureSelect').value);
+  if (isNaN(fi)) return;
+  const plotType = document.getElementById('boxType').value;
+  const groups = APP.processed.groups;
+  const groupSet=[...new Set(groups)];
+  const mat=APP.processed.mat;
+
+  const traces=groupSet.map((g,gi)=>{
+    const vals=groups.map((gr,i)=>gr===g?mat[i][fi]:null).filter(v=>v!==null);
+    const base={y:vals,name:g,marker:{color:COLORS[gi%COLORS.length]}};
+    if (plotType==='box') return {...base,type:'box',boxpoints:'all',jitter:0.4,pointpos:0};
+    if (plotType==='violin') return {...base,type:'violin',box:{visible:true},meanline:{visible:true}};
+    return {...base,type:'violin',box:{visible:true},meanline:{visible:true}};
+  });
+
+  const compound=APP.processed.compounds[fi];
+  Plotly.newPlot('boxViolinPlot',traces,{
+    title:`${compound.name}<br><sub>Class: ${compound.group||'N/A'}</sub>`,
+    yaxis:{title:'Value (processed)'},
+    margin:{t:70,b:60,l:60,r:20}
+  },{responsive:true});
+}
+
+function renderTopBoxPlots() {
+  const top=APP.results.filter(r=>r.significant).sort((a,b)=>a.fdr-b.fdr).slice(0,6);
+  const groups=APP.processed.groups;
+  const groupSet=[...new Set(groups)];
+  const mat=APP.processed.mat;
+  let html='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">';
+  top.forEach(r=>{
+    const id='minibox'+r.idx;
+    html+=`<div id="${id}" style="height:220px;border:1px solid #e2e8f0;border-radius:6px"></div>`;
+  });
+  html+='</div>';
+  document.getElementById('topBoxPlots').innerHTML=html;
+  top.forEach(r=>{
+    const traces=groupSet.map((g,gi)=>{
+      const vals=groups.map((gr,i)=>gr===g?mat[i][r.idx]:null).filter(v=>v!==null);
+      return {y:vals,name:g,type:'box',marker:{color:COLORS[gi%COLORS.length]},boxpoints:'all',jitter:0.4};
+    });
+    Plotly.newPlot('minibox'+r.idx,traces,{
+      title:{text:r.name.length>25?r.name.slice(0,25)+'…':r.name,font:{size:10}},
+      showlegend:false,margin:{t:35,b:30,l:35,r:10},
+      yaxis:{title:'',tickfont:{size:8}}
+    },{responsive:true,displayModeBar:false});
+  });
+}
+
+function renderBar() {
+  const fi=parseInt(document.getElementById('barFeatureSelect').value);
+  if (isNaN(fi)) return;
+  const groups=APP.processed.groups;
+  const groupSet=[...new Set(groups)];
+  const mat=APP.processed.mat;
+  const compound=APP.processed.compounds[fi];
+
+  const traces=groupSet.map((g,gi)=>{
+    const vals=groups.map((gr,i)=>gr===g?mat[i][fi]:null).filter(v=>v!==null);
+    const m=mean(vals), s=std(vals);
+    return {x:[g],y:[m],error_y:{type:'data',array:[s],visible:true},
+      type:'bar',name:g,marker:{color:COLORS[gi%COLORS.length]}};
+  });
+  Plotly.newPlot('barPlot',traces,{
+    title:`${compound.name}<br><sub>Mean ± SD</sub>`,
+    yaxis:{title:'Value (processed)'},
+    margin:{t:70,b:60,l:60,r:20}
+  },{responsive:true});
+}
+
+function renderTopBars() {
+  const top=APP.results.filter(r=>r.significant).sort((a,b)=>a.fdr-b.fdr).slice(0,20);
+  const groups=APP.processed.groups;
+  const groupSet=[...new Set(groups)];
+  const mat=APP.processed.mat;
+  let html='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:10px">';
+  top.forEach(r=>{const id='minibar'+r.idx;html+=`<div id="${id}" style="height:200px;border:1px solid #e2e8f0;border-radius:6px"></div>`;});
+  html+='</div>';
+  document.getElementById('topBarPlots').innerHTML=html;
+  top.forEach(r=>{
+    const traces=groupSet.map((g,gi)=>{
+      const vals=groups.map((gr,i)=>gr===g?mat[i][r.idx]:null).filter(v=>v!==null);
+      return {x:[g],y:[mean(vals)],error_y:{type:'data',array:[std(vals)],visible:true},
+        type:'bar',name:g,marker:{color:COLORS[gi%COLORS.length]}};
+    });
+    Plotly.newPlot('minibar'+r.idx,traces,{
+      title:{text:r.name.length>20?r.name.slice(0,20)+'…':r.name,font:{size:9}},
+      showlegend:false,margin:{t:30,b:30,l:35,r:10},
+      yaxis:{tickfont:{size:8}}
+    },{responsive:true,displayModeBar:false});
+  });
+}
+
+function showVizTab(id, el) {
+  document.querySelectorAll('#step5 .tab-content').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('#step5 .tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  el.classList.add('active');
+  if (id==='heatmapTab') renderHeatmap();
+  if (id==='boxTab') { renderBoxViolin(); renderTopBoxPlots(); }
+  if (id==='barTab') { renderBar(); }
+  if (id==='plsdaTab') renderPLSDA();
+  if (id==='nmdsTab') renderNMDS();
+}
+
+// =====================================================================
+// EXPORT
+// =====================================================================
+function exportCSV() {
+  const {mat, scaledMat, groups, names, compounds} = APP.processed;
+  const csvType = document.querySelector('input[name=csvContent]:checked').value;
+  const useScaled = csvType==='processed';
+  let rows;
+  if (csvType==='significant') {
+    const sigIdx = APP.results.filter(r=>r.significant).map(r=>r.idx);
+    const sigCompounds = sigIdx.map(i=>compounds[i]);
+    const header = ['SampleID','Group',...APP.config.clinicalVars.map(v=>v.name),...sigCompounds.map(c=>c.name)];
+    rows = mat.map((row,si) => {
+      const clinVals = APP.config.clinicalVars.map(v => APP.config.clinicalData[v.name][APP.processed.sIdx[si]]||'');
+      return [names[si], groups[si], ...clinVals, ...sigIdx.map(fi=>mat[si][fi])];
+    });
+    downloadCSV([header,...rows], 'metabolomics_significant.csv');
+  } else {
+    const m = useScaled ? scaledMat : mat;
+    const header = ['SampleID','Group',...APP.config.clinicalVars.map(v=>v.name),...compounds.map(c=>c.name)];
+    rows = m.map((row,si) => {
+      const clinVals = APP.config.clinicalVars.map(v => APP.config.clinicalData[v.name][APP.processed.sIdx[si]]||'');
+      return [names[si], groups[si], ...clinVals, ...row];
+    });
+    downloadCSV([header,...rows], `metabolomics_${csvType}.csv`);
+  }
+}
+
+function exportStatsCSV() {
+  if (!APP.results) return;
+  const groupSet=[...new Set(APP.processed.groups)];
+  const header=['Feature','Class','CAS','Transition',
+    ...groupSet.flatMap(g=>[`Mean_${g}`,`SD_${g}`]),
+    'Log2FC','p-value','FDR_BH','Significant','VIP'];
+  const vipMap={};
+  if (APP.plsda) APP.plsda.vip.forEach((v,i)=>vipMap[APP.processed.compounds[i].name]=v);
+  const rows=APP.results.map(r=>[
+    r.name, r.group, r.cas, r.transition,
+    ...groupSet.flatMap(g=>[(r.means[g]||0).toFixed(6),(r.sds[g]||0).toFixed(6)]),
+    r.fc.toFixed(6), r.pvalue.toExponential(6), r.fdr.toExponential(6),
+    r.significant?1:0, (vipMap[r.name]||0).toFixed(4)
+  ]);
+  downloadCSV([header,...rows],'metabolomics_statistics.csv');
+}
+
+function downloadCSV(rows, filename) {
+  const csv=rows.map(r=>r.map(v=>{
+    const s=String(v==null?'':v);
+    return s.includes(',')||s.includes('"')||s.includes('\n') ? `"${s.replace(/"/g,'""')}"` : s;
+  }).join(',')).join('\r\n');
+  const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename; a.click();
+}
+
+function exportWordReport() {
+  showLoading('Generating Word report…','Capturing plot images…');
+  const rpt={};
+  const checks=['rptOverview','rptStats','rptPCA','rptNMDS','rptVIP','rptHeatmap','rptBox','rptBar'];
+  checks.forEach(id=>rpt[id]=document.getElementById(id).checked);
+
+  const plotIds=[];
+  if (rpt.rptPCA) plotIds.push({id:'pcaPlot',title:'Figure: PCA Score Plot'});
+  if (rpt.rptNMDS) plotIds.push({id:'nmdsPlot',title:'Figure: NMDS Ordination'});
+  if (rpt.rptVIP) plotIds.push({id:'vipPlot',title:'Figure: PLS-DA VIP Scores'},{id:'plsdaScorePlot',title:'Figure: PLS-DA Score Plot'});
+  if (rpt.rptHeatmap) plotIds.push({id:'heatmapPlot',title:'Figure: Heatmap'});
+  if (rpt.rptBox) plotIds.push({id:'boxViolinPlot',title:'Figure: Box/Violin Plot'});
+  if (rpt.rptBar) plotIds.push({id:'barPlot',title:'Figure: Bar Plot'});
+
+  captureAll(plotIds).then(images => {
+    const html=buildWordHTML(images, rpt);
+    const blob=new Blob([html],{type:'application/msword'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download='Metabolomics_Report.doc';
+    a.click();
+    hideLoading();
+    document.getElementById('exportStatus').innerHTML='<div class="alert alert-success">✅ Report downloaded</div>';
+  }).catch(err=>{
+    hideLoading();
+    document.getElementById('exportStatus').innerHTML=`<div class="alert alert-error">Error: ${err.message}</div>`;
+  });
+}
+
+function captureAll(plotIds) {
+  const promises=plotIds.map(({id,title})=>
+    Plotly.toImage(document.getElementById(id),{format:'png',width:900,height:500})
+      .then(dataURL=>({title,dataURL}))
+      .catch(()=>({title,dataURL:null}))
+  );
+  return Promise.all(promises);
+}
+
+function buildWordHTML(images, rpt) {
+  const {compounds,groups,names}=APP.processed||{};
+  const groupSet=[...(new Set(groups||[]))];
+  const sig=APP.results?APP.results.filter(r=>r.significant):[];
+  const today=new Date().toLocaleDateString();
+  const pct=(sig.length/(APP.results?.length||1)*100).toFixed(1);
+
+  let html=`<!DOCTYPE html><html><head><meta charset="UTF-8">
+  <style>
+  body{font-family:Arial,sans-serif;font-size:11pt;margin:2cm}
+  h1{font-size:16pt;color:#1a3a5c;border-bottom:2px solid #1a3a5c;padding-bottom:6pt}
+  h2{font-size:13pt;color:#2563a8;margin-top:18pt}
+  h3{font-size:11pt;color:#1a3a5c;margin-top:12pt}
+  table{border-collapse:collapse;width:100%;font-size:9pt;margin:8pt 0}
+  th{background:#1a3a5c;color:white;padding:4pt 6pt;text-align:left}
+  td{padding:3pt 6pt;border:1px solid #cbd5e1}
+  tr:nth-child(even) td{background:#f8fafc}
+  img{max-width:100%;height:auto;margin:8pt 0;display:block}
+  .sig td{background:#fef2f2 !important}
+  .summary-box{background:#f0f9ff;border:1px solid #bae6fd;padding:8pt;border-radius:4pt;margin:8pt 0}
+  </style></head><body>
+  <h1>Metabolomics Analysis Report</h1>
+  <p><b>Generated:</b> ${today} &nbsp;|&nbsp; <b>Analyst:</b> TMU Glycomedicine &nbsp;|&nbsp; <b>Workflow:</b> MetaboAnalystR</p>`;
+
+  if (rpt.rptOverview) {
+    html+=`<h2>1. Data Overview</h2>
+    <div class="summary-box">
+    <b>Total features:</b> ${APP.results?.length||0}<br>
+    <b>Samples:</b> ${names?.length||0} (${groupSet.join(', ')})<br>
+    <b>Significant features (FDR&lt;${APP.processing.pThresh}):</b> ${sig.length} (${pct}%)<br>
+    <b>Processing:</b> Missing value: ${document.querySelector('input[name=mvMethod]:checked')?.value||'min5'},
+    Norm: ${document.querySelector('input[name=normMethod]:checked')?.value||'none'},
+    Transform: ${document.querySelector('input[name=transMethod]:checked')?.value||'log2'},
+    Scale: ${document.querySelector('input[name=scaleMethod]:checked')?.value||'auto'}<br>
+    <b>Statistical test:</b> ${document.getElementById('statTest')?.value||'auto'},
+    FDR: ${document.getElementById('fdrMethod')?.value||'bh'}
+    </div>`;
+  }
+
+  if (rpt.rptStats && APP.results) {
+    const topSig=sig.sort((a,b)=>a.fdr-b.fdr).slice(0,50);
+    html+=`<h2>2. Statistical Results (Top ${topSig.length} significant features)</h2>
+    <table><tr>
+      <th>#</th><th>Feature</th><th>Class</th>
+      ${groupSet.map(g=>`<th>Mean(${g})</th>`).join('')}
+      <th>Log2FC</th><th>p-value</th><th>FDR</th>
+    </tr>`;
+    topSig.forEach((r,i)=>{
+      html+=`<tr class="sig"><td>${i+1}</td><td>${r.name}</td><td>${r.group||'-'}</td>
+      ${groupSet.map(g=>`<td>${(r.means[g]||0).toFixed(3)}</td>`).join('')}
+      <td>${r.fc.toFixed(3)}</td><td>${r.pvalue.toExponential(2)}</td><td>${r.fdr.toExponential(2)}</td></tr>`;
+    });
+    html+='</table>';
+  }
+
+  images.forEach(({title,dataURL})=>{
+    if (dataURL) {
+      html+=`<h3>${title}</h3><img src="${dataURL}" alt="${title}">`;
+    }
+  });
+
+  html+='</body></html>';
+  return html;
+}
+
+// =====================================================================
+// MATH UTILITIES
+// =====================================================================
+function mean(arr) { return arr.reduce((a,b)=>a+b,0)/arr.length; }
+function variance(arr) { const m=mean(arr); return arr.reduce((a,b)=>a+(b-m)**2,0)/(arr.length-1); }
+function std(arr) { return arr.length<2?0:Math.sqrt(variance(arr)); }
+function median(arr) { const s=[...arr].sort((a,b)=>a-b); const n=s.length; return n%2?s[(n-1)/2]:(s[n/2-1]+s[n/2])/2; }
+function vecDot(a,b) { return a.reduce((s,v,i)=>s+v*b[i],0); }
+function vecDist(a,b) { return Math.sqrt(a.reduce((s,v,i)=>s+(v-b[i])**2,0)); }
+function matVec(M,v) { return M.map(row=>vecDot(row,v)); }
+
+// t-distribution CDF (regularized incomplete beta)
+function tDist(t,df) {
+  const x=df/(df+t*t);
+  return 0.5*incompleteBeta(df/2,0.5,x);
+}
+function incompleteBeta(a,b,x) {
+  // Continued fraction approximation
+  if (x<0||x>1) return 0;
+  if (x===0) return 0; if (x===1) return 1;
+  const lbeta=lgamma(a)+lgamma(b)-lgamma(a+b);
+  const front=Math.exp(Math.log(x)*a+Math.log(1-x)*b-lbeta)/a;
+  let f=1,c=1,d=0;
+  const maxIter=200;
+  for (let m=0;m<maxIter;m++) {
+    const md=m*2;
+    // Even step
+    let d2=-(a+md)*(a+b+md)*x/((a+md)*(a+md+1));
+    c=1+d2/c; if(Math.abs(c)<1e-30)c=1e-30;
+    d=1+d2*d; if(Math.abs(d)<1e-30)d=1e-30;
+    d=1/d; f*=c*d;
+    // Odd step
+    d2=(m+1)*(b-m)*x/((a+md+1)*(a+md+2));
+    c=1+d2/c; if(Math.abs(c)<1e-30)c=1e-30;
+    d=1+d2*d; if(Math.abs(d)<1e-30)d=1e-30;
+    d=1/d; const delta=c*d; f*=delta;
+    if (Math.abs(delta-1)<1e-8) break;
+  }
+  return front*f;
+}
+function lgamma(x) {
+  const c=[76.18009172947146,-86.50532032941677,24.01409824083091,-1.231739572450155,0.1208650973866179e-2,-0.5395239384953e-5];
+  let y=x,tmp=x+5.5,ser=1.000000000190015;
+  tmp-=(x+0.5)*Math.log(tmp);
+  c.forEach((v,i)=>ser+=v/(y+i+1));
+  return -tmp+Math.log(2.5066282746310005*ser/x);
+}
+function normCDF(z) {
+  const t=1/(1+0.2316419*Math.abs(z));
+  const d=0.3989423*Math.exp(-z*z/2);
+  const p=d*t*(0.3193815+t*(-0.3565638+t*(1.7814779+t*(-1.8212560+t*1.3302744))));
+  return z>0?1-p:p;
+}
+function fDistPValue(F,d1,d2) {
+  const x=d1*F/(d1*F+d2);
+  return 1-incompleteBeta(d1/2,d2/2,x);
+}
+function chiSquareCDF(x,k) {
+  if (x<=0) return 0;
+  return lowerIncompleteGamma(k/2,x/2)/Math.exp(lgamma(k/2));
+}
+function lowerIncompleteGamma(a,x) {
+  // Series expansion
+  if (x<=0) return 0;
+  let sum=1/a, term=1/a;
+  for (let n=1;n<100;n++) { term*=x/(a+n); sum+=term; if(Math.abs(term)<1e-10*sum) break; }
+  return Math.pow(x,a)*Math.exp(-x)*sum;
+}
+
+// =====================================================================
+// UI HELPERS
+// =====================================================================
+function showLoading(msg='Processing…',detail='') {
+  document.getElementById('loadingMsg').textContent=msg;
+  document.getElementById('loadingDetail').textContent=detail;
+  document.getElementById('loadingOverlay').style.display='flex';
+}
+function updateLoading(msg='',detail='') {
+  if(msg) document.getElementById('loadingMsg').textContent=msg;
+  if(detail) document.getElementById('loadingDetail').textContent=detail;
+}
+function hideLoading() { document.getElementById('loadingOverlay').style.display='none'; }
+function log(msg) { console.log('[MetaboAnalyzer]',msg); }
+
+// Initialize
+window.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('groupNames').dispatchEvent(new Event('input'));
+});
+</script>
+</body>
+</html>
